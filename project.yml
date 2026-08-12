@@ -1,0 +1,69 @@
+name: MorningMainline
+options:
+  bundleIdPrefix: com.jaynana
+  deploymentTarget:
+    iOS: "17.0"
+    watchOS: "10.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+targets:
+  MorningMainline:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: Shared
+      - path: iOS
+        excludes:
+          - Info.plist
+          - MorningMainline.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jaynana.MorningMainline
+        PRODUCT_NAME: 早上主线
+        TARGETED_DEVICE_FAMILY: "1,2"
+        INFOPLIST_FILE: iOS/Info.plist
+        CODE_SIGN_ENTITLEMENTS: iOS/MorningMainline.entitlements
+    dependencies:
+      - target: MorningMainlineWatch
+        embed: true
+  MorningMainlineWatch:
+    type: application
+    platform: watchOS
+    deploymentTarget: "10.0"
+    sources:
+      - path: Shared
+      - path: Watch
+        excludes:
+          - Info.plist
+          - MorningMainlineWatch.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jaynana.MorningMainline.watchkitapp
+        PRODUCT_NAME: 早上主线
+        INFOPLIST_FILE: Watch/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Watch/MorningMainlineWatch.entitlements
+        SKIP_INSTALL: YES
+  MorningMainlineTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: Tests
+    dependencies:
+      - target: MorningMainline
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jaynana.MorningMainlineTests
+schemes:
+  MorningMainline:
+    build:
+      targets:
+        MorningMainline: all
+        MorningMainlineWatch: all
+    test:
+      targets:
+        - MorningMainlineTests

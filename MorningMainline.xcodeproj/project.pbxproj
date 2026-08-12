@@ -1,0 +1,580 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0119AE191AA9ED564081B936 /* MorningMainlineWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3CC14B4BDE389E83050559D /* MorningMainlineWatchApp.swift */; };
+		0DF01694E09D1EF755C3552B /* ConnectivityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98F7FA90F91D78AA6647D544 /* ConnectivityService.swift */; };
+		23D02F2F13EE3D36DF640D64 /* RoutineModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB83A579D5478BDF9908C694 /* RoutineModelsTests.swift */; };
+		3A1B35D481F6FF99212FD8E7 /* ConnectivityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98F7FA90F91D78AA6647D544 /* ConnectivityService.swift */; };
+		4C9A220D04177D68402749CF /* RoutineStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 685366F1FF3CFF057A7CB78A /* RoutineStore.swift */; };
+		7E4F6E767A19806170D08D30 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17C822EEDDCBF74CAF04F044 /* ContentView.swift */; };
+		88E9AEBE621A66433EF4B269 /* CloudSnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E9A2635C55F0B2920F75C7D /* CloudSnapshotStore.swift */; };
+		A37F93138C8577441BC04C7B /* RoutineModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41EC34B26EFB0073715C59B2 /* RoutineModels.swift */; };
+		A95E300B57AAFFAF9B1F993E /* RoutineModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41EC34B26EFB0073715C59B2 /* RoutineModels.swift */; };
+		AD73D002B1423B5E0AAA7862 /* WatchRoutineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 115B2276EC22382FDECAA411 /* WatchRoutineView.swift */; };
+		BB07DA6BF92F57DAD2DD81FD /* ReminderScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5B493C8FC40180E22A0A3D7 /* ReminderScheduler.swift */; };
+		D30B3DB38FC973BA862792EA /* MorningMainlineApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81252AB16B5C74E922A67BF0 /* MorningMainlineApp.swift */; };
+		D74EA92D7414624CBDA15284 /* ReminderScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5B493C8FC40180E22A0A3D7 /* ReminderScheduler.swift */; };
+		D94BD656820222019244AC67 /* RoutineStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 685366F1FF3CFF057A7CB78A /* RoutineStore.swift */; };
+		E34D7E2AD4EBC7243C2B8C51 /* CloudSnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E9A2635C55F0B2920F75C7D /* CloudSnapshotStore.swift */; };
+		E47C2B95ED81DB5EB9CE5C73 /* MorningMainlineWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 889B8248FC3DB8241941954C /* MorningMainlineWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		50D906E613B44EB86FD662F0 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 2003C3DDAD677D85CA15556C /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D870C107F85F7A46ECF26834;
+			remoteInfo = MorningMainlineWatch;
+		};
+		61A47EABDED56138AF5F6CA3 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 2003C3DDAD677D85CA15556C /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1E0FC3B41F508E491B70D0B1;
+			remoteInfo = MorningMainline;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		03D7771087CED5073BECF2AD /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				E47C2B95ED81DB5EB9CE5C73 /* MorningMainlineWatch.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		115B2276EC22382FDECAA411 /* WatchRoutineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchRoutineView.swift; sourceTree = "<group>"; };
+		17C822EEDDCBF74CAF04F044 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		1E9A2635C55F0B2920F75C7D /* CloudSnapshotStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudSnapshotStore.swift; sourceTree = "<group>"; };
+		41EC34B26EFB0073715C59B2 /* RoutineModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutineModels.swift; sourceTree = "<group>"; };
+		685366F1FF3CFF057A7CB78A /* RoutineStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutineStore.swift; sourceTree = "<group>"; };
+		6F9961BEA5AB0C40814660E8 /* MorningMainline.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = MorningMainline.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		81252AB16B5C74E922A67BF0 /* MorningMainlineApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MorningMainlineApp.swift; sourceTree = "<group>"; };
+		889B8248FC3DB8241941954C /* MorningMainlineWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MorningMainlineWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		98F7FA90F91D78AA6647D544 /* ConnectivityService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectivityService.swift; sourceTree = "<group>"; };
+		9BE18A093BEC246DF52A6FB3 /* MorningMainlineTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = MorningMainlineTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C3CC14B4BDE389E83050559D /* MorningMainlineWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MorningMainlineWatchApp.swift; sourceTree = "<group>"; };
+		C5B493C8FC40180E22A0A3D7 /* ReminderScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderScheduler.swift; sourceTree = "<group>"; };
+		FB83A579D5478BDF9908C694 /* RoutineModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutineModelsTests.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		1D1D6C83F299CFD0C42073C3 = {
+			isa = PBXGroup;
+			children = (
+				892B507C3661ED8263062A0E /* iOS */,
+				75885569F28504BBB85A8EFA /* Shared */,
+				93D4CA74D8A836CD3A3A3280 /* Tests */,
+				43C1ED5BDD48D284C4880B67 /* Watch */,
+				C55E31CAEAC2B59EEF6F9714 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		326E754FDFC3C3B64FA6F810 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				1E9A2635C55F0B2920F75C7D /* CloudSnapshotStore.swift */,
+				98F7FA90F91D78AA6647D544 /* ConnectivityService.swift */,
+				C5B493C8FC40180E22A0A3D7 /* ReminderScheduler.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		43C1ED5BDD48D284C4880B67 /* Watch */ = {
+			isa = PBXGroup;
+			children = (
+				C3CC14B4BDE389E83050559D /* MorningMainlineWatchApp.swift */,
+				115B2276EC22382FDECAA411 /* WatchRoutineView.swift */,
+			);
+			path = Watch;
+			sourceTree = "<group>";
+		};
+		5A8797C8D6FBD18836B7F0B7 /* Store */ = {
+			isa = PBXGroup;
+			children = (
+				685366F1FF3CFF057A7CB78A /* RoutineStore.swift */,
+			);
+			path = Store;
+			sourceTree = "<group>";
+		};
+		75885569F28504BBB85A8EFA /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				7AA684D59EEFEB899FFAB946 /* Models */,
+				326E754FDFC3C3B64FA6F810 /* Services */,
+				5A8797C8D6FBD18836B7F0B7 /* Store */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		7AA684D59EEFEB899FFAB946 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				41EC34B26EFB0073715C59B2 /* RoutineModels.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		892B507C3661ED8263062A0E /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				17C822EEDDCBF74CAF04F044 /* ContentView.swift */,
+				81252AB16B5C74E922A67BF0 /* MorningMainlineApp.swift */,
+			);
+			path = iOS;
+			sourceTree = "<group>";
+		};
+		93D4CA74D8A836CD3A3A3280 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				FB83A579D5478BDF9908C694 /* RoutineModelsTests.swift */,
+			);
+			path = Tests;
+			sourceTree = "<group>";
+		};
+		C55E31CAEAC2B59EEF6F9714 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				6F9961BEA5AB0C40814660E8 /* MorningMainline.app */,
+				9BE18A093BEC246DF52A6FB3 /* MorningMainlineTests.xctest */,
+				889B8248FC3DB8241941954C /* MorningMainlineWatch.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		1E0FC3B41F508E491B70D0B1 /* MorningMainline */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F04E2CCCC6262213F33D3F79 /* Build configuration list for PBXNativeTarget "MorningMainline" */;
+			buildPhases = (
+				7A87B03CA7F135FABF239BA1 /* Sources */,
+				03D7771087CED5073BECF2AD /* Embed Watch Content */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				19C30962DAF7D27463475D67 /* PBXTargetDependency */,
+			);
+			name = MorningMainline;
+			packageProductDependencies = (
+			);
+			productName = MorningMainline;
+			productReference = 6F9961BEA5AB0C40814660E8 /* MorningMainline.app */;
+			productType = "com.apple.product-type.application";
+		};
+		D0999A416BF55B5CA90115B8 /* MorningMainlineTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BA77374A50356585B5DA3965 /* Build configuration list for PBXNativeTarget "MorningMainlineTests" */;
+			buildPhases = (
+				762DC5B6F55FDEAD1F459EFA /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A65777A0295DDC0DC3E742D7 /* PBXTargetDependency */,
+			);
+			name = MorningMainlineTests;
+			packageProductDependencies = (
+			);
+			productName = MorningMainlineTests;
+			productReference = 9BE18A093BEC246DF52A6FB3 /* MorningMainlineTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		D870C107F85F7A46ECF26834 /* MorningMainlineWatch */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4FD72070A06674AEDEF612FC /* Build configuration list for PBXNativeTarget "MorningMainlineWatch" */;
+			buildPhases = (
+				3DDCF972468D3B94E55FC077 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MorningMainlineWatch;
+			packageProductDependencies = (
+			);
+			productName = MorningMainlineWatch;
+			productReference = 889B8248FC3DB8241941954C /* MorningMainlineWatch.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		2003C3DDAD677D85CA15556C /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					1E0FC3B41F508E491B70D0B1 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+					D0999A416BF55B5CA90115B8 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+					D870C107F85F7A46ECF26834 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 8FD43B5D4BA403491AC6B7A4 /* Build configuration list for PBXProject "MorningMainline" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 1D1D6C83F299CFD0C42073C3;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = C55E31CAEAC2B59EEF6F9714 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				1E0FC3B41F508E491B70D0B1 /* MorningMainline */,
+				D870C107F85F7A46ECF26834 /* MorningMainlineWatch */,
+				D0999A416BF55B5CA90115B8 /* MorningMainlineTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		3DDCF972468D3B94E55FC077 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				88E9AEBE621A66433EF4B269 /* CloudSnapshotStore.swift in Sources */,
+				3A1B35D481F6FF99212FD8E7 /* ConnectivityService.swift in Sources */,
+				0119AE191AA9ED564081B936 /* MorningMainlineWatchApp.swift in Sources */,
+				BB07DA6BF92F57DAD2DD81FD /* ReminderScheduler.swift in Sources */,
+				A95E300B57AAFFAF9B1F993E /* RoutineModels.swift in Sources */,
+				D94BD656820222019244AC67 /* RoutineStore.swift in Sources */,
+				AD73D002B1423B5E0AAA7862 /* WatchRoutineView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		762DC5B6F55FDEAD1F459EFA /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				23D02F2F13EE3D36DF640D64 /* RoutineModelsTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7A87B03CA7F135FABF239BA1 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E34D7E2AD4EBC7243C2B8C51 /* CloudSnapshotStore.swift in Sources */,
+				0DF01694E09D1EF755C3552B /* ConnectivityService.swift in Sources */,
+				7E4F6E767A19806170D08D30 /* ContentView.swift in Sources */,
+				D30B3DB38FC973BA862792EA /* MorningMainlineApp.swift in Sources */,
+				D74EA92D7414624CBDA15284 /* ReminderScheduler.swift in Sources */,
+				A37F93138C8577441BC04C7B /* RoutineModels.swift in Sources */,
+				4C9A220D04177D68402749CF /* RoutineStore.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		19C30962DAF7D27463475D67 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D870C107F85F7A46ECF26834 /* MorningMainlineWatch */;
+			targetProxy = 50D906E613B44EB86FD662F0 /* PBXContainerItemProxy */;
+		};
+		A65777A0295DDC0DC3E742D7 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 1E0FC3B41F508E491B70D0B1 /* MorningMainline */;
+			targetProxy = 61A47EABDED56138AF5F6CA3 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		13949BA5D6F1F39D63118069 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = iOS/MorningMainline.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				INFOPLIST_FILE = iOS/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.jaynana.MorningMainline;
+				PRODUCT_NAME = "早上主线";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		13C017D8FE08FB1CF8C7E3C7 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Watch/MorningMainlineWatch.entitlements;
+				INFOPLIST_FILE = Watch/Info.plist;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jaynana.MorningMainline.watchkitapp;
+				PRODUCT_NAME = "早上主线";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Release;
+		};
+		4038A3F852C2C31FFBDBFBF9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.jaynana.MorningMainlineTests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MorningMainline.app/MorningMainline";
+			};
+			name = Release;
+		};
+		7630AB653396A19C932C210E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = iOS/MorningMainline.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				INFOPLIST_FILE = iOS/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.jaynana.MorningMainline;
+				PRODUCT_NAME = "早上主线";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		8BB6DD6B63546D8921FC2336 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Watch/MorningMainlineWatch.entitlements;
+				INFOPLIST_FILE = Watch/Info.plist;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jaynana.MorningMainline.watchkitapp;
+				PRODUCT_NAME = "早上主线";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Debug;
+		};
+		B3A8C2292B4DCC3A4A0ABA98 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Debug;
+		};
+		BC26766F94EE60291F186262 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.jaynana.MorningMainlineTests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MorningMainline.app/MorningMainline";
+			};
+			name = Debug;
+		};
+		F00795B2C93777EE1B64788B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		4FD72070A06674AEDEF612FC /* Build configuration list for PBXNativeTarget "MorningMainlineWatch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8BB6DD6B63546D8921FC2336 /* Debug */,
+				13C017D8FE08FB1CF8C7E3C7 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		8FD43B5D4BA403491AC6B7A4 /* Build configuration list for PBXProject "MorningMainline" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B3A8C2292B4DCC3A4A0ABA98 /* Debug */,
+				F00795B2C93777EE1B64788B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		BA77374A50356585B5DA3965 /* Build configuration list for PBXNativeTarget "MorningMainlineTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BC26766F94EE60291F186262 /* Debug */,
+				4038A3F852C2C31FFBDBFBF9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		F04E2CCCC6262213F33D3F79 /* Build configuration list for PBXNativeTarget "MorningMainline" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				13949BA5D6F1F39D63118069 /* Debug */,
+				7630AB653396A19C932C210E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 2003C3DDAD677D85CA15556C /* Project object */;
+}
