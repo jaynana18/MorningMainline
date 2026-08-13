@@ -223,15 +223,15 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					1E0FC3B41F508E491B70D0B1 = {
-						DevelopmentTeam = "";
+						DevelopmentTeam = HN3GC82LRP;
 						ProvisioningStyle = Automatic;
 					};
 					D0999A416BF55B5CA90115B8 = {
-						DevelopmentTeam = "";
+						DevelopmentTeam = HN3GC82LRP;
 						ProvisioningStyle = Automatic;
 					};
 					D870C107F85F7A46ECF26834 = {
-						DevelopmentTeam = "";
+						DevelopmentTeam = HN3GC82LRP;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -314,7 +314,6 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = iOS/MorningMainline.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				INFOPLIST_FILE = iOS/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -333,7 +332,6 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = Watch/MorningMainlineWatch.entitlements;
 				INFOPLIST_FILE = Watch/Info.plist;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jaynana.MorningMainline.watchkitapp;
 				PRODUCT_NAME = "早上主线";
@@ -365,7 +363,6 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = iOS/MorningMainline.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				INFOPLIST_FILE = iOS/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -384,7 +381,6 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = Watch/MorningMainlineWatch.entitlements;
 				INFOPLIST_FILE = Watch/Info.plist;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jaynana.MorningMainline.watchkitapp;
 				PRODUCT_NAME = "早上主线";
@@ -431,7 +427,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = HN3GC82LRP;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -513,7 +509,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = HN3GC82LRP;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;

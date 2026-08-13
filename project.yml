@@ -7,7 +7,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    DEVELOPMENT_TEAM: ""
+    DEVELOPMENT_TEAM: HN3GC82LRP
     CODE_SIGN_STYLE: Automatic
 targets:
   MorningMainline:
@@ -26,7 +26,6 @@ targets:
         PRODUCT_NAME: 早上主线
         TARGETED_DEVICE_FAMILY: "1,2"
         INFOPLIST_FILE: iOS/Info.plist
-        CODE_SIGN_ENTITLEMENTS: iOS/MorningMainline.entitlements
     dependencies:
       - target: MorningMainlineWatch
         embed: true
@@ -45,7 +44,6 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.jaynana.MorningMainline.watchkitapp
         PRODUCT_NAME: 早上主线
         INFOPLIST_FILE: Watch/Info.plist
-        CODE_SIGN_ENTITLEMENTS: Watch/MorningMainlineWatch.entitlements
         SKIP_INSTALL: YES
   MorningMainlineTests:
     type: bundle.unit-test
