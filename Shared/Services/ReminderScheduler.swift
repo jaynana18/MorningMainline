@@ -11,7 +11,7 @@ actor ReminderScheduler {
         _ = try? await center.requestAuthorization(options: [.alert, .sound, .badge])
     }
 
-    func replaceNotifications(template: RoutineTemplate, session: RoutineSession?) async {
+    func replaceNotifications(session: RoutineSession?) async {
         let existing = await center.pendingNotificationRequests()
         let identifiers = existing
             .map(\.identifier)
@@ -20,26 +20,22 @@ actor ReminderScheduler {
 
         guard let session, session.state == .running else { return }
 
-        for step in template.steps {
-            guard
-                let progress = session.progress(for: step),
-                progress.state == .pending,
-                progress.dueAt > Date()
-            else { continue }
+        for progress in session.progress where progress.state == .pending && progress.dueAt > Date() {
+            let step = progress.step
 
             let content = UNMutableNotificationContent()
-            content.title = step.importance == .hardDeadline ? "🚨 \(step.title)" : "早上主线 · \(step.title)"
+            content.title = step.importance == .hardDeadline ? "🚨 \(step.title)" : "不跑偏 · \(step.title)"
             content.body = step.prompt
             content.sound = .default
             content.categoryIdentifier = categoryID
-            content.userInfo = ["stepID": step.id.uuidString]
+            content.userInfo = ["progressID": progress.id.uuidString]
 
             let trigger = UNTimeIntervalNotificationTrigger(
                 timeInterval: max(1, progress.dueAt.timeIntervalSinceNow),
                 repeats: false
             )
             let request = UNNotificationRequest(
-                identifier: "morning-mainline-\(session.id.uuidString)-\(step.id.uuidString)",
+                identifier: "morning-mainline-\(session.id.uuidString)-\(progress.id.uuidString)",
                 content: content,
                 trigger: trigger
             )
@@ -47,4 +43,3 @@ actor ReminderScheduler {
         }
     }
 }
-

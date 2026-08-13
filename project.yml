@@ -23,7 +23,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.jaynana.MorningMainline
-        PRODUCT_NAME: 早上主线
+        PRODUCT_NAME: MorningMainline
         TARGETED_DEVICE_FAMILY: "1,2"
         INFOPLIST_FILE: iOS/Info.plist
     dependencies:
@@ -42,7 +42,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.jaynana.MorningMainline.watchkitapp
-        PRODUCT_NAME: 早上主线
+        PRODUCT_NAME: MorningMainlineWatch
         INFOPLIST_FILE: Watch/Info.plist
         SKIP_INSTALL: YES
   MorningMainlineTests:
@@ -56,6 +56,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.jaynana.MorningMainlineTests
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/MorningMainline.app/MorningMainline"
+        BUNDLE_LOADER: "$(TEST_HOST)"
 schemes:
   MorningMainline:
     build:

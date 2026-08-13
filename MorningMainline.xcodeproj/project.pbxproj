@@ -18,8 +18,10 @@
 		A95E300B57AAFFAF9B1F993E /* RoutineModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41EC34B26EFB0073715C59B2 /* RoutineModels.swift */; };
 		AD73D002B1423B5E0AAA7862 /* WatchRoutineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 115B2276EC22382FDECAA411 /* WatchRoutineView.swift */; };
 		BB07DA6BF92F57DAD2DD81FD /* ReminderScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5B493C8FC40180E22A0A3D7 /* ReminderScheduler.swift */; };
+		CA3C25B6C7EECD4C3242532D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C9CE0CC7FA428822CAEAE919 /* Assets.xcassets */; };
 		D30B3DB38FC973BA862792EA /* MorningMainlineApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81252AB16B5C74E922A67BF0 /* MorningMainlineApp.swift */; };
 		D74EA92D7414624CBDA15284 /* ReminderScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5B493C8FC40180E22A0A3D7 /* ReminderScheduler.swift */; };
+		D85AAECD6702ACC84409D6EF /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F0BC7E8AF711B8314D83B022 /* Assets.xcassets */; };
 		D94BD656820222019244AC67 /* RoutineStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 685366F1FF3CFF057A7CB78A /* RoutineStore.swift */; };
 		E34D7E2AD4EBC7243C2B8C51 /* CloudSnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E9A2635C55F0B2920F75C7D /* CloudSnapshotStore.swift */; };
 		E47C2B95ED81DB5EB9CE5C73 /* MorningMainlineWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 889B8248FC3DB8241941954C /* MorningMainlineWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -69,6 +71,8 @@
 		9BE18A093BEC246DF52A6FB3 /* MorningMainlineTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = MorningMainlineTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C3CC14B4BDE389E83050559D /* MorningMainlineWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MorningMainlineWatchApp.swift; sourceTree = "<group>"; };
 		C5B493C8FC40180E22A0A3D7 /* ReminderScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderScheduler.swift; sourceTree = "<group>"; };
+		C9CE0CC7FA428822CAEAE919 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		F0BC7E8AF711B8314D83B022 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		FB83A579D5478BDF9908C694 /* RoutineModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutineModelsTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -97,6 +101,7 @@
 		43C1ED5BDD48D284C4880B67 /* Watch */ = {
 			isa = PBXGroup;
 			children = (
+				C9CE0CC7FA428822CAEAE919 /* Assets.xcassets */,
 				C3CC14B4BDE389E83050559D /* MorningMainlineWatchApp.swift */,
 				115B2276EC22382FDECAA411 /* WatchRoutineView.swift */,
 			);
@@ -132,6 +137,7 @@
 		892B507C3661ED8263062A0E /* iOS */ = {
 			isa = PBXGroup;
 			children = (
+				F0BC7E8AF711B8314D83B022 /* Assets.xcassets */,
 				17C822EEDDCBF74CAF04F044 /* ContentView.swift */,
 				81252AB16B5C74E922A67BF0 /* MorningMainlineApp.swift */,
 			);
@@ -164,6 +170,7 @@
 			buildConfigurationList = F04E2CCCC6262213F33D3F79 /* Build configuration list for PBXNativeTarget "MorningMainline" */;
 			buildPhases = (
 				7A87B03CA7F135FABF239BA1 /* Sources */,
+				C5281DE73E66DED2205507E7 /* Resources */,
 				03D7771087CED5073BECF2AD /* Embed Watch Content */,
 			);
 			buildRules = (
@@ -201,6 +208,7 @@
 			buildConfigurationList = 4FD72070A06674AEDEF612FC /* Build configuration list for PBXNativeTarget "MorningMainlineWatch" */;
 			buildPhases = (
 				3DDCF972468D3B94E55FC077 /* Sources */,
+				190E1BCFF4FD3FBE77650F76 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -256,6 +264,25 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		190E1BCFF4FD3FBE77650F76 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CA3C25B6C7EECD4C3242532D /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C5281DE73E66DED2205507E7 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D85AAECD6702ACC84409D6EF /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		3DDCF972468D3B94E55FC077 /* Sources */ = {
@@ -322,7 +349,7 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.jaynana.MorningMainline;
-				PRODUCT_NAME = "早上主线";
+				PRODUCT_NAME = MorningMainline;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -334,7 +361,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				INFOPLIST_FILE = Watch/Info.plist;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jaynana.MorningMainline.watchkitapp;
-				PRODUCT_NAME = "早上主线";
+				PRODUCT_NAME = MorningMainlineWatch;
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
 				TARGETED_DEVICE_FAMILY = 4;
@@ -371,7 +398,7 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.jaynana.MorningMainline;
-				PRODUCT_NAME = "早上主线";
+				PRODUCT_NAME = MorningMainline;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -383,7 +410,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				INFOPLIST_FILE = Watch/Info.plist;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jaynana.MorningMainline.watchkitapp;
-				PRODUCT_NAME = "早上主线";
+				PRODUCT_NAME = MorningMainlineWatch;
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
 				TARGETED_DEVICE_FAMILY = 4;
