@@ -540,10 +540,17 @@ export const DEFAULT_TEMPLATES: readonly RoutineTemplate[] = [
 ];
 
 /**
- * Date.distantPast 的等价常量。
- * 作为 Apple 参考秒约等于 -63113904000（≈ 0001-01-01T00:00:00Z）。
+ * `Date.distantPast` 的等价常量。
+ *
+ * 必须与 Swift 逐字节对齐：`Date.distantPast` = Apple 参考秒 -63114076800，
+ * 换算成 Unix 毫秒 = (-63114076800 + 978307200) * 1000 = -62135769600000。
+ *
+ * 注意：这与「0001-01-01T00:00:00Z」并不相等（后者 = -62135596800000，差 2 天）。
+ * 该值会参与跨端冲突裁决（`updatedAt` 比较），哨兵值不一致会让「初始快照谁胜出」
+ * 在两端出现非对称，故不能用直觉值，必须用 Swift 实测值。
+ * 依据：tools/cross-check/run.sh 的 K 组对齐检查。
  */
-export const DISTANT_PAST = new Date(-62135596800000);
+export const DISTANT_PAST = new Date(-62135769600000);
 
 /** 空快照（RoutineSnapshot.initial 的等价物，originID 为新 UUID）。 */
 export function initialSnapshot(): RoutineSnapshot {

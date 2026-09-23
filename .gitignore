@@ -12,3 +12,7 @@ xcuserdata/
 web/node_modules/
 web/dist/
 
+# cross-check Swift harness 编译产物（体积大，跑 run.sh 可随时重建）
+tools/cross-check/*/harness
+tools/cross-check/*/*_harness
+

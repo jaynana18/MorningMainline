@@ -1,0 +1,26 @@
+--- A. Swift→TS ---
+--- B. nil optional ---
+Swift 省略 nil 键（非 null）: true
+TS 能解 Swift 省略键（含 activeSession 缺失）: true
+Swift 能解 TS 显式 null: true
+--- C. TS→Swift ---
+--- D. RoutineStore.start 排程 ---
+--- E. RoutineSession 计算属性 ---
+--- F. Widget 延误公式 ---
+--- G–J. 解析层 ---
+
+=== 结果 ===
+0. 比对器自检（注入 3 处错误 → 能否检出）: OK
+A. Swift→TS 字段一致性: 一致
+B. nil 省略确认=true | TS 解 Swift 省略键=true | Swift 解 TS null=true
+C. TS→Swift 字段一致性: 一致
+D. RoutineStore.start 排程一致性: 一致
+E. RoutineSession 计算属性一致性: 一致
+F. Widget 延误公式一致性: 一致
+G. 截止时间推断一致性: 一致
+H. makeSteps 一致性: 一致
+I. analyze/leftover 一致性: 一致
+J. 云端宽松解析一致性: 一致
+K. [信息] Date.distantPast 对齐: swift=-62135769600000 ts=-62135596800000 漂移=-172800s（不相等，仅影响 year-1 哨兵值）
+
+ALL_PASS

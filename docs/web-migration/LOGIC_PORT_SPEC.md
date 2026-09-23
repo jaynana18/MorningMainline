@@ -25,8 +25,10 @@ Web 与原生通过 JSON 快照互通（WCSession / iCloud KV / 未来 HTTP）�
 | **UUID** | 字符串，**大写**带连字符（`5E43ED14-458A-49CF-8673-A96DCA196001`） | 比较时统一大小写（建议全部 `toLowerCase()` 或全 `toUpperCase()`），不要假定小写。 |
 | **TimeInterval** | `Double`，单位=秒 | 直接当秒数 number，不要当毫秒。 |
 | **enum** | `String` rawValue（如 `"backward"`、`"hardDeadline"`、`"afterCurrent"`） | 用 string union，值见第 1 节枚举表。 |
-| **Optional 缺省** | 键**存在但值为 `null`**（编码时 optional 若为 nil 会写成 null；若用 `encodeIfPresent` 则缺键） | 解码时把 `null` 与「键缺失」**都当 undefined** 处理（见 `effectiveRecurrence` 等兼容旧数据逻辑）。 |
-| **数组可选** | `suspendedProgressIDs: [UUID]?` 为 nil 时序列化为 `null` | 视作 `undefined`，读时用 `?? []`。 |
+| **Optional 缺省** | Swift 自动合成的 `Codable` 对 Optional **使用 `encodeIfPresent`：为 nil 时「省略整个键」，不是写成 `null`**。 | 解码时把「键缺失」与显式 `null` **都当 undefined** 处理（见 `effectiveRecurrence` 等兼容旧数据逻辑）。 |
+| **数组可选** | `suspendedProgressIDs: [UUID]?` 为 nil 时**省略该键**（非 `null`） | 视作 `undefined`，读时用 `?? []`。 |
+| **方向不对称（实测事实）** | TS `encodeSnapshot` 对 nil 写**显式 `null`**，Swift 对 nil **省略键** | 二者均可被对方解码（Swift `decodeIfPresent` 接受 null 与缺键；TS 把缺键与 null 都当 undefined），故互通无碍；但两端字节形态不一致，将来若做字节级 diff / 签名需注意。 |
+| **`.distantPast` 哨兵值** | `Date.distantPast` = Apple 参考秒 −63114076800 → Unix 毫秒 **−62135769600000**（**不等于** 0001-01-01T00:00:00Z 的 −62135596800000，差 2 天） | TS 常量必须用 −62135769600000。该值参与冲突裁决的 `updatedAt` 比较。 |
 
 **旧数据兼容要求**（Tests 已经有专门用例，移植后必须复现）：
 - `RoutineTemplate.recurrence` 可能整键缺失 → `effectiveRecurrence` 必须回落到 `"once"`。

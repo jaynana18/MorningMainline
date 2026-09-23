@@ -18,7 +18,9 @@ import {
   createSession,
   createSnapshot,
   createStep,
+  DISTANT_PAST,
   HOMEWORK_TEMPLATE,
+  initialSnapshot,
   MORNING_TEMPLATE,
 } from '../src/core/types';
 import { effectiveRecurrence, originalDueAt, remainingWork } from '../src/core/session';
@@ -37,6 +39,17 @@ describe('serialization — Apple 参考日期（最大坑，§5.1）', () => {
     const correct = new Date(refSecondsToMs(refSeconds)).getTime();
     const naive = new Date(refSeconds * 1000).getTime();
     expect(correct - naive).toBe(978307200 * 1000);
+  });
+
+  it('DISTANT_PAST 与 Swift Date.distantPast 逐字节对齐（锁定哨兵值）', () => {
+    // Swift: Date.distantPast = Apple 参考秒 -63114076800
+    //        → Unix 毫秒 = (-63114076800 + 978307200) * 1000 = -62135769600000
+    expect(msToRefSeconds(DISTANT_PAST.getTime())).toBe(-63114076800);
+    expect(DISTANT_PAST.getTime()).toBe(-62135769600000);
+    // 反例锁：直觉上的 0001-01-01T00:00:00Z（-62135596800000）与真实值差 2 天，
+    // 用它会让跨端冲突裁决出现非对称，必须与 Swift 一致。
+    expect(DISTANT_PAST.getTime()).not.toBe(-62135596800000);
+    expect(initialSnapshot().updatedAt.getTime()).toBe(DISTANT_PAST.getTime());
   });
 
   it('encodeSnapshot 把 Date 写成参考秒，且可无损解码回同一时刻', () => {
