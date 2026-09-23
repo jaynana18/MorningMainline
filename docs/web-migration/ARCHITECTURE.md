@@ -121,6 +121,107 @@ MorningMainline/
 
 ---
 
+## 4b. P1 接口冻结（平台层 / 视图层并行开发的契约）
+
+平台层（`platform/` + `stores/`）与视图层（`views/`）**按此契约并行开发**，互不改对方文件。
+
+### 4b.1 `PlatformBridge` 接口（`web/src/platform/bridge.ts`）
+
+```ts
+export interface DeviceInfo { id: string; role: DeviceRole }
+
+export interface BridgeCapabilities {
+  watchSync: boolean;              // WebView=true, browser=false
+  backgroundNotification: boolean; // WebView=true, browser=仅前台
+  modelParsing: boolean;           // 是否有可用代理/原生代发
+  widget: boolean;                 // WebView=true, browser=false
+}
+
+export interface PlatformBridge {
+  readonly host: 'webview' | 'browser';
+  readonly capabilities: BridgeCapabilities;
+
+  deviceInfo(): Promise<DeviceInfo>;
+  readSnapshot(): Promise<RoutineSnapshot | null>;
+  writeSnapshot(snapshot: RoutineSnapshot): Promise<void>;
+
+  requestNotificationAuthorization(): Promise<boolean>;
+  replaceNotifications(session: RoutineSession | null): Promise<void>;
+  presentNotification(payload: { title: string; body: string; level?: 'normal' | 'timeSensitive' }): Promise<void>;
+
+  /** 云端语义解析。宿主无能力时 resolve(null)，调用方静默回退纯规则。 */
+  parseWithModel(input: string): Promise<ParseResult | null>;
+
+  /** 返回取消订阅函数。 */
+  onSnapshotChanged(cb: (snapshot: RoutineSnapshot) => void): () => void;
+  onNotificationOpened(cb: (payload: { progressID?: string; sessionID?: string; minuteOffset?: number }) => void): () => void;
+}
+
+/** 自动探测宿主并返回对应实现（webview / browser）。 */
+export function createBridge(): PlatformBridge;
+```
+
+**硬性要求**：
+- `platform/mock.ts` 必须提供纯内存实现，供单测与浏览器无持久化场景使用。
+- 浏览器宿主的 `writeSnapshot` 落 `IndexedDB`；`deviceInfo().id` 必须**持久化且稳定**（否则 `originID` 过滤失效 → 同步自激）。
+- 浏览器宿主 `parseWithModel` 在**无后端代理时返回 `null`**，绝不可把 API Key 打进前端产物。
+- 桥的调用必须带超时与失败降级：任何原生方法抛错/超时（建议 5s）都不得让 UI 卡死，须回落到 `browser` 语义或返回 `null`。
+
+### 4b.2 Pinia store 契约（`web/src/stores/routine.ts`）
+
+单一 store：`useRoutineStore()`，内部持有 `core/store.ts` 的 `RoutineStore` 实例（core 层**不做响应式改造**，由 Pinia 包一层）。
+
+```ts
+// state（只读对外）
+snapshot: RoutineSnapshot
+ready: boolean                 // init 完成
+parsing: boolean               // 正在解析
+lastParse: ParseResult | null  // 最近一次「一句话创建」的解析产物
+notice: string | null          // 降级/失败提示（如「已回退本机规则」）
+
+// getters
+session: RoutineSession | null
+currentProgress: StepProgress | null
+nextProgress: StepProgress[]
+templates: RoutineTemplate[]
+
+// actions
+init(): Promise<void>                       // 读快照 + 请求通知授权 + 订阅 onSnapshotChanged
+parse(input: string): Promise<ParseResult>  // 走 RoutineParsingPipeline；浏览器宿主经 bridge.parseWithModel
+createTemplate(input: string, opts: { deadline: Date | null; recurrence: Recurrence }): RoutineTemplate
+addTemplate(t: RoutineTemplate): void
+start(t: RoutineTemplate, opts?: { deadlineOverride?: Date | null; bufferOverride?: number | null }): void
+startProgress(p: StepProgress): void
+complete(p: StepProgress): void
+snoozeCurrent(seconds?: number): void
+addTemporaryTask(title: string, minutes: number, placement: TemporaryTaskPlacement): void
+reorderPendingTasks(ids: string[]): void
+deleteFromCurrentSession(p: StepProgress): void
+cancel(): void
+finish(): void
+applyIncoming(s: RoutineSnapshot): boolean
+```
+
+**每次变更后必须**：`writeSnapshot()` → `replaceNotifications(session)`。这两步收口在 store 的一个私有 `commit()` 里，视图层不得各自调用。
+
+### 4b.3 视图层要复刻的交互（源：`iOS/ContentView.swift`，1385 行 / 13 个 View）
+
+| Vue 组件 | 源 SwiftUI | 必须保留的交互 |
+| --- | --- | --- |
+| `views/QuickCreateView.vue` | `QuickCreateView`（1222 行起） | 输入 → **生成按钮** → 生成后**才**出现截止时间控件与预览；无截止时间时开关**默认关闭**；手改截止时间/重复方式**即时重算且不清空已解析步骤**；footer 提示「截止时间可以直接写进去，比如『18点30结束』；生成后也能手动调整。」 |
+| `views/HomeView.vue` | `ContentView` 主体 + `TaskLinesHero` + `TaskLineCard` | 任务线列表、启动、进入预览 |
+| `views/TemplatePreviewView.vue` | `TaskLinePreviewView` | 倒推计划展示（`BackwardPlanSummary`）、步骤编辑 |
+| `views/SessionView.vue` | `ActiveFocusCard` + `TimelineCard` + `PendingTaskReorderView` + `TemporaryTaskView` + `CompletionResultOverlay` | 当前任务焦点卡、时间线、未完成项重排（拖拽）、临时任务插入（两种 placement）、完成结果浮层、snooze |
+| `views/PlanImpactCard.vue` | `PlanImpactCard` | 延误影响提示 |
+
+**视图层禁止**：直接 import `core/`（一律经 Pinia store）；直接触碰 `platform/`（一律经 store）。
+
+### 4b.4 提醒文案单一来源
+
+应用内弹窗与系统通知必须共用同一文案生成函数（放 `core/`），逐字复刻 `ReminderScheduler` 的 8 个里程碑（−10/−5/−3/−1/0/+2/+4/+6 分钟）与每任务一条的措辞。禁止在视图与 platform 各写一份。
+
+---
+
 ## 5. 三条不可协商的语义（违反即跨端漂移）
 
 1. **Date 编码是 Apple 参考日期秒，不是 Unix 秒。**
