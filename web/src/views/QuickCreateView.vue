@@ -16,13 +16,18 @@
           v-model="input"
           class="mm-textarea"
           data-testid="create-input"
-          placeholder="例：18点30结束，去厕所5分钟 刷杯子2分钟 买水果10分钟"
         ></textarea>
-        <!-- 示例占位文案（逐字） -->
+        <!-- 示例文案：与 iOS 版一致，只在编辑器下方出现一次（原版 TextEditor 无 placeholder）。 -->
         <p class="mm-hint" style="margin-top: 8px">
           例：18点30结束，去厕所5分钟 刷杯子2分钟 买水果10分钟
         </p>
-        <p style="color: var(--mm-orange); font-size: 12px">🎤 也可以点系统键盘的麦克风直接说</p>
+        <p style="color: var(--mm-orange); font-size: 12px; display: flex; align-items: center; gap: 4px">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <rect x="6" y="1.5" width="4" height="8" rx="2" stroke="currentColor" stroke-width="1.3" />
+            <path d="M3.5 7.5v.5a4.5 4.5 0 0 0 9 0v-.5M8 12.5V14.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
+          </svg>
+          <span>也可以点系统键盘的麦克风直接说</span>
+        </p>
         <!-- footer 文案（逐字） -->
         <p class="mm-hint">截止时间可以直接写进去，比如「18点30结束」；生成后也能手动调整。</p>
       </section>
@@ -201,10 +206,20 @@ watch(input, () => {
   generated.value = null;
 });
 
-function onSave(): void {
-  if (generated.value) {
-    store.addTemplate(generated.value);
+async function onSave(): Promise<void> {
+  if (!generated.value) {
+    void router.push('/');
+    return;
   }
+  // 保存要落到 core 状态机（addTemplate → requireRoutine）；解析/生成都不需要它，
+  // 所以只有这一步必须等 init 完成（web 特有：routine 实例是异步建的）。
+  try {
+    await store.ensureReady();
+  } catch {
+    store.notice = '数据还没准备好，请稍后再试。';
+    return;
+  }
+  store.addTemplate(generated.value);
   void router.push('/');
 }
 

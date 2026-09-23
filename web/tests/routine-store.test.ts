@@ -267,6 +267,50 @@ describe('stores/routine — applyIncoming（跨端冲突裁决转调）', () =>
   });
 });
 
+describe('stores/routine — ensureReady（web 特有的异步 init 窗口）', () => {
+  it('窗口真实存在：templates 已非空，但 core 状态机还没建 → 直接 start 抛错', () => {
+    const { store } = setup();
+    expect(store.ready).toBe(false);
+    // store 创建那一刻就带内置种子模板（initialSnapshot），所以「有模板可点」不等于「可以 start」。
+    expect(store.templates.length).toBeGreaterThan(0);
+    expect(() => store.start(MORNING_TEMPLATE)).toThrow(/尚未初始化/);
+  });
+
+  it('ensureReady 后即可 start（视图层不必自己先 await init）', async () => {
+    const { store, bridge } = setup();
+    await store.ensureReady();
+    expect(store.ready).toBe(true);
+    expect(() => store.start(MORNING_TEMPLATE)).not.toThrow();
+    expect(store.session).not.toBeNull();
+    expect(bridge.deviceInfoCallCount).toBe(1);
+  });
+
+  it('ensureReady 与 init 并发 → 共享同一次初始化，不重复请求设备信息', async () => {
+    const { store, bridge } = setup();
+    await Promise.all([store.init(), store.ensureReady(), store.ensureReady()]);
+    expect(bridge.deviceInfoCallCount).toBe(1);
+    expect(store.ready).toBe(true);
+  });
+
+  it('init 失败后可重试（不缓存 rejected promise）', async () => {
+    const bridge = createMockBridge();
+    const original = bridge.deviceInfo.bind(bridge);
+    let fail = true;
+    bridge.deviceInfo = async () => {
+      if (fail) {
+        fail = false;
+        throw new Error('boom');
+      }
+      return original();
+    };
+    const { store } = setup(bridge);
+    await expect(store.init()).rejects.toThrow('boom');
+    expect(store.ready).toBe(false);
+    await store.ensureReady();
+    expect(store.ready).toBe(true);
+  });
+});
+
 describe('stores/routine — 视图辅助', () => {
   it('formatMinutes 逐字复刻 Swift 文案', () => {
     expect(formatMinutes(90)).toBe('1 分钟');

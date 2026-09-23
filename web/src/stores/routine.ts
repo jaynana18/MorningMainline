@@ -111,6 +111,8 @@ export const useRoutineStore = defineStore('routine', () => {
   // core 状态机实例在 init() 中建（需先拿到持久的 deviceInfo）。
   let routine: RoutineStore | null = null;
   let unsubscribeSnapshotChanged: (() => void) | null = null;
+  // init() 只跑一次；视图的动作路径经 ensureReady() 等同一个 Promise。
+  let initPromise: Promise<void> | null = null;
 
   // ---- getters ----
   const session = computed<RoutineSession | null>(() => snapshot.value.activeSession);
@@ -156,10 +158,27 @@ export const useRoutineStore = defineStore('routine', () => {
   }
 
   // ---- actions ----
-  async function init(): Promise<void> {
-    if (ready.value) {
-      return;
+  /**
+   * 初始化（幂等，失败可重试）。
+   *
+   * ⚠️ web 特有问题：`RoutineStore` 是异步建的（要先拿持久的 `deviceInfo`），但
+   * `templates` 在 store 创建那一刻就有值（`initialSnapshot()` 的内置模板）。
+   * 这之间存在一个窗口 —— 卡片已可点，而 core 状态机还是 null。Swift 版 store 在
+   * `MorningMainlineApp.init()` 里同步构造，没有这个窗口。视图层必须经
+   * `ensureReady()` 再动作，不能只看 `templates` 非空。
+   */
+  function init(): Promise<void> {
+    if (!initPromise) {
+      initPromise = performInit().catch((error: unknown) => {
+        // 失败后清空，允许下一次调用重试；否则会永久缓存一个 rejected promise。
+        initPromise = null;
+        throw error;
+      });
     }
+    return initPromise;
+  }
+
+  async function performInit(): Promise<void> {
     const info = await bridge.deviceInfo();
     const stored = await bridge.readSnapshot();
     routine = new RoutineStore({
@@ -176,6 +195,14 @@ export const useRoutineStore = defineStore('routine', () => {
     });
 
     ready.value = true;
+  }
+
+  /** 等初始化完成。视图执行任何依赖 core 状态机的动作前必须先 await 它。 */
+  async function ensureReady(): Promise<void> {
+    if (ready.value) {
+      return;
+    }
+    await init();
   }
 
   /** 停止订阅（组件卸载 / 热更新时调用）。 */
@@ -323,6 +350,7 @@ export const useRoutineStore = defineStore('routine', () => {
     templates,
     // actions
     init,
+    ensureReady,
     dispose,
     parse,
     createTemplate,

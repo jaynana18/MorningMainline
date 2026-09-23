@@ -17,10 +17,12 @@
         <span class="mm-hint">选择一条主线</span>
       </div>
 
-      <p v-if="!store.ready" class="mm-hint">正在载入…</p>
+      <p v-if="!store.ready" class="mm-hint" data-testid="home-loading">正在载入…</p>
 
-      <!-- TaskLineCard 列表 -->
-      <div class="mm-grid">
+      <!-- TaskLineCard 列表。
+           init 完成前不渲染：store 创建时 templates 已带内置种子，
+           提前渲染会先闪一帧种子模板（用户自建的可能不同），且点击会撞上未建好的 core 状态机。 -->
+      <div v-else class="mm-grid">
         <button
           v-for="(template, index) in store.templates"
           :key="template.id"
@@ -103,7 +105,15 @@ function goCreate(): void {
   void router.push('/create');
 }
 
-function startTemplate(template: RoutineTemplate): void {
+async function startTemplate(template: RoutineTemplate): Promise<void> {
+  // init() 是异步的（要先读 deviceInfo / 已存快照），core 状态机此刻可能还没建好。
+  // Swift 版 store 同步构造、无此窗口；web 端必须在这里等一次。
+  try {
+    await store.ensureReady();
+  } catch {
+    store.notice = '数据还没准备好，请稍后再试。';
+    return;
+  }
   store.start(template);
   void router.push('/session');
 }
