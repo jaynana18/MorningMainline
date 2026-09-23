@@ -11,6 +11,9 @@
   --mm-sky: #58b8e6;
   --mm-soft-sky: #c9e9f7;
   --mm-ink: #1d1f1d;
+  /* 新增（不修改既有变量取值）：会话页用到的语义色。 */
+  --mm-ink-soft: rgba(29, 31, 29, 0.6);
+  --mm-red: #e5484d;
   --mm-radius: 20px;
 }
 
@@ -253,4 +256,324 @@ body {
 .toast-enter-from,
 .toast-leave-to {
   opacity: 0;
+}
+
+/* ==========================================================================
+   会话页（SessionView / iOS ContentView 执行中分支）
+   ========================================================================== */
+
+/* 工具栏两侧占位，保证标题居中 */
+.mm-toolbar__side {
+  display: flex;
+  align-items: center;
+  min-width: 88px;
+}
+
+.mm-toolbar__side--end {
+  justify-content: flex-end;
+}
+
+/* 两栏布局（Swift horizontalSizeClass == .regular 的等价物） */
+.mm-session-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  align-items: start;
+  gap: 18px;
+}
+
+@media (min-width: 980px) {
+  .mm-session-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.mm-session-col {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* doodleCard：背景 + 内描边（对应 Swift `.stroke(ink.opacity(0.62), lineWidth: 2.5)`） */
+.mm-doodle {
+  box-shadow: inset 0 0 0 2.5px rgba(29, 31, 29, 0.62);
+}
+
+.mm-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mm-headline {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.mm-focus-title {
+  margin: 8px 0;
+  font-size: 36px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.mm-countdown {
+  margin: 8px 0;
+  font-size: 32px;
+  font-weight: 800;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.mm-badge {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.mm-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.mm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.mm-actions--end {
+  justify-content: flex-end;
+}
+
+.mm-btn--small {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.mm-btn--red {
+  background: var(--mm-red);
+  color: #fff;
+}
+
+.mm-btn--icon {
+  padding: 10px 12px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.mm-btn--icon-sm {
+  padding: 6px 8px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.mm-link-btn {
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--mm-ink);
+  text-decoration: underline;
+}
+
+.mm-disclosure {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 6px 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--mm-ink);
+}
+
+.mm-impact {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.mm-impact__time {
+  margin: 3px 0 0;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.mm-impact__details {
+  padding-top: 4px;
+  font-size: 13px;
+}
+
+/* 时间线行 */
+.mm-timeline-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 15px;
+  box-shadow: inset 0 0 0 2px rgba(29, 31, 29, 0.45);
+}
+
+.mm-timeline__title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* 弹层 */
+.mm-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.mm-modal {
+  width: 100%;
+  max-width: 420px;
+  max-height: 86vh;
+  overflow: auto;
+  padding: 20px;
+  border-radius: 20px;
+  background: var(--mm-canvas);
+  box-shadow: inset 0 0 0 2.5px rgba(29, 31, 29, 0.62);
+}
+
+.mm-modal--dialog {
+  max-width: 360px;
+  text-align: center;
+}
+
+.mm-modal h4 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.mm-input {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 14px;
+  font-family: inherit;
+  border: 1.5px solid rgba(29, 31, 29, 0.25);
+  border-radius: 12px;
+  background: #fff;
+}
+
+/* 重排列表 */
+.mm-reorder {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mm-reorder__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: inset 0 0 0 1.5px rgba(29, 31, 29, 0.2);
+  cursor: grab;
+}
+
+.mm-reorder__item--dragging {
+  opacity: 0.5;
+}
+
+.mm-iconbtn {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 6px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(29, 31, 29, 0.06);
+  cursor: pointer;
+}
+
+.mm-iconbtn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* 完成结算浮层 */
+.mm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.24);
+}
+
+.mm-result-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  max-width: 360px;
+  padding: 28px;
+  text-align: center;
+  border-radius: 38px;
+  background: var(--mm-sky);
+  box-shadow:
+    inset 0 0 0 3px rgba(29, 31, 29, 0.7),
+    0 10px 20px rgba(29, 31, 29, 0.2);
+}
+
+.mm-result__headline {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.mm-result__emphasis {
+  margin: 0;
+  font-size: 40px;
+  font-weight: 900;
+  color: var(--mm-orange);
+}
+
+.mm-result__times {
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.mm-result__banner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 999px;
+  background: var(--mm-cream);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.mm-result__pencil {
+  position: absolute;
+  top: -8px;
+  right: 6px;
+  transform: rotate(-18deg);
+  opacity: 0.7;
 }

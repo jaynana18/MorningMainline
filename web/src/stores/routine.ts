@@ -40,6 +40,14 @@ import { createBridge, type PlatformBridge } from '../platform/bridge';
 // 重导出：视图层经 store 取用（避免直接 import core）。
 export { RECURRENCE_TITLES, RECURRENCES, PARSE_SOURCE_TITLES };
 export { deadlineStep, effectiveRecurrence, totalTaskDuration } from '../core/session';
+// 会话页（SessionView）需要的派生纯函数：预计排程 / 是否迟到 / 未完成判定 / 原计划时间。
+export {
+  estimatedCompletion,
+  estimatedDueDates,
+  isIncomplete,
+  isLate,
+  originalDueAt,
+} from '../core/session';
 // 类型亦经 store 中转，保证「视图层不直接 import core/」。
 export type {
   ParseResult,
@@ -189,9 +197,17 @@ export const useRoutineStore = defineStore('routine', () => {
     });
     snapshot.value = cloneSnapshot(routine.snapshot);
 
-    await bridge.requestNotificationAuthorization();
     unsubscribeSnapshotChanged = bridge.onSnapshotChanged((incoming) => {
       applyIncoming(incoming);
+    });
+
+    // `ready` 的语义是「core 状态机已建好、视图可以开始动作」，而通知授权与渲染**无关**。
+    // 因此这里**不 await**：浏览器宿主下 `Notification.requestPermission()` 可能长期不 settle
+    // （用户忽略弹窗 / 浏览器因非用户手势而挂起），一旦 await，首页会永久停在「正在载入…」
+    // 且**没有任何报错**——静默卡死，最难排查。详见 platform/browser.ts 的 PERMISSION_TIMEOUT_MS。
+    // 另：不 await 也顺带避免了「授权失败 → 整个 init reject → ready 永假」这条耦合。
+    void bridge.requestNotificationAuthorization().catch(() => {
+      // 静默降级：通知授权失败不得影响主流程（§4b.1）。
     });
 
     ready.value = true;
