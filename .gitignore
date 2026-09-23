@@ -4,3 +4,11 @@ build/
 *.xcuserstate
 xcuserdata/
 
+# scheme 文件里带 Run 阶段的调试环境变量（含 COSMO_MIND_API_KEY）。
+# 这个仓库是单人开发，不需要共享 scheme，忽略掉比事后清理泄漏更安全。
+*.xcscheme
+
+# Web 端（web/）依赖与构建产物
+web/node_modules/
+web/dist/
+
