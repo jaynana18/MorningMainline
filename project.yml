@@ -20,6 +20,13 @@ targets:
         excludes:
           - Info.plist
           - MorningMainline.entitlements
+      # Web 产物：UI 由 web/ 的 Vue 构建承载（WKWebView 宿主，见 iOS/WebHost.swift）。
+      # 用 folder reference（type: folder）：整个 dist 目录原样拷进 bundle，
+      # 否则 xcodegen 会递归展开成一堆单独资源文件，破坏 `index.html` 的相对引用布局。
+      # 顺序要求：先 `cd web && npm run build` 生成 web/dist，再 `xcodegen generate`。
+      - path: web/dist
+        type: folder
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.jaynana.MorningMainline

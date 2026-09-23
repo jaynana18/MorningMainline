@@ -6,6 +6,10 @@ final class RoutineStore: ObservableObject {
     @Published private(set) var snapshot: RoutineSnapshot
 
     let deviceRole: DeviceRole
+    /// 供 WebView 宿主（`iOS/WebHost.swift`）读取的稳定设备 id。
+    /// **必须与私有 `deviceID` 同源**：JS 侧会把 `device.info` 的 id 当作自己的 `originID`，
+    /// 一旦两边不一致，`apply(_:)` 的 `originID != deviceID` 过滤就会失效 → 同步自激。
+    var deviceId: String { deviceID.uuidString }
     private let localKey = "morning-mainline.local-snapshot.v2"
     private let deviceID: UUID
     private let cloud = CloudSnapshotStore()
@@ -215,6 +219,18 @@ final class RoutineStore: ObservableObject {
 
         snapshot = incoming
         saveLocally()
+        rescheduleIfNeeded()
+    }
+
+    /// 用 WebView 宿主（JS 侧已自行完成状态机运算与冲突裁决）传来的快照替换本机快照。
+    ///
+    /// 与 `apply(_:)` 的区别：`apply` 是「对端推来的，需裁决」；本方法是「本机 UI 层的权威快照，
+    /// 直接采纳」。**因此不改写 `updatedAt` / `originID` / `revision`** —— 那些由 JS 侧权威维护，
+    /// 原生改了会和 JS 的裁决逻辑互相打架。`commit()` 顺带做的广播与重排通知在这里照做。
+    func adoptFromWebView(_ incoming: RoutineSnapshot) {
+        snapshot = incoming
+        saveLocally()
+        connectivity.publish(snapshot)
         rescheduleIfNeeded()
     }
 

@@ -34,5 +34,13 @@
         <key>UIApplicationSupportsMultipleScenes</key>
         <true/>
     </dict>
+    <!-- 仅放宽「本地网络」的 ATS（DEBUG 下 WKWebView 连 vite dev server 用）。
+         注意：这里**没有**开 NSAllowsArbitraryLoads，线上远程流量仍受 ATS 全量约束；
+         localhost / .local 在 Release 下并不被访问，故随包发布无实际安全影响。 -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsLocalNetworking</key>
+        <true/>
+    </dict>
 </dict>
 </plist>
