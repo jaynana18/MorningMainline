@@ -1,0 +1,24 @@
+{
+  "name": "morning-mainline-web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "MorningMainline（不跑偏）Web 版 —— 阶段 P0：core 层纯逻辑（Swift → TypeScript 逐行移植）",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "TZ=Asia/Shanghai vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@vitejs/plugin-vue": "^5.2.1",
+    "typescript": "^5.7.2",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.8"
+  }
+}
