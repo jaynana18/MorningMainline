@@ -85,7 +85,10 @@
         <section class="mm-section" data-testid="preview-section">
           <div class="mm-hint" style="font-weight: 700; margin-bottom: 8px">预览</div>
           <div class="mm-preview-item">
-            <span>{{ generated.name }}</span>
+            <span class="mm-inline">
+              <SessionIcon :name="iconNameForSymbol(generated.symbol)" :size="14" />
+              {{ generated.name }}
+            </span>
           </div>
           <div class="mm-preview-item">
             <span>重复</span>
@@ -119,6 +122,8 @@ import {
   type RoutineStep,
   type RoutineTemplate,
 } from '../stores/routine';
+import { iconNameForSymbol } from './session/helpers';
+import SessionIcon from './session/SessionIcon.vue';
 
 const store = useRoutineStore();
 const router = useRouter();
@@ -220,7 +225,9 @@ async function onSave(): Promise<void> {
     return;
   }
   store.addTemplate(generated.value);
-  void router.push('/');
+  // 保存后进预览页（选本次计划 / 原计划），对齐 Swift `selectedTemplate = template`。
+  store.selectTemplate(generated.value);
+  void router.push('/preview');
 }
 
 function onCancel(): void {

@@ -11,7 +11,7 @@
   >
     <div class="mm-row" style="padding: 0">
       <span class="mm-inline mm-hint" style="font-weight: 600; gap: 6px">
-        <SessionIcon name="target" :size="14" />
+        <SessionIcon :name="iconNameForSymbol(session?.templateSymbol)" :size="14" />
         {{ session.templateName || '任务线' }}
       </span>
       <span
@@ -77,6 +77,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { isIncomplete, isLate, useRoutineStore } from '../../stores/routine';
+import { iconNameForSymbol } from './helpers';
 import RemainingTimeText from './RemainingTimeText.vue';
 import SessionIcon from './SessionIcon.vue';
 import TemporaryTaskView from './TemporaryTaskView.vue';

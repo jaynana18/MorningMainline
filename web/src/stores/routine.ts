@@ -40,6 +40,8 @@ import { createBridge, type PlatformBridge } from '../platform/bridge';
 // 重导出：视图层经 store 取用（避免直接 import core）。
 export { RECURRENCE_TITLES, RECURRENCES, PARSE_SOURCE_TITLES };
 export { deadlineStep, effectiveRecurrence, totalTaskDuration } from '../core/session';
+// 预览页（PreviewView）需要的派生纯函数：只保留 task 步骤 / 计算某天的截止时刻。
+export { deadlineOn, taskSteps } from '../core/session';
 // 会话页（SessionView）需要的派生纯函数：预计排程 / 是否迟到 / 未完成判定 / 原计划时间。
 export {
   estimatedCompletion,
@@ -115,6 +117,9 @@ export const useRoutineStore = defineStore('routine', () => {
   const parsing = ref(false);
   const lastParse = ref<ParseResult | null>(null);
   const notice = ref<string | null>(null);
+  // 「已选但未开始」的模板：点任务卡 / 保存新建后进入预览页，选完计划才真正 start。
+  // 对齐 Swift `ContentView.selectedTemplate` 的 `navigationDestination(item:)`。
+  const pendingTemplate = ref<RoutineTemplate | null>(null);
 
   // core 状态机实例在 init() 中建（需先拿到持久的 deviceInfo）。
   let routine: RoutineStore | null = null;
@@ -291,6 +296,11 @@ export const useRoutineStore = defineStore('routine', () => {
     commit();
   }
 
+  /** 记录「待预览」的模板（进入 /preview）。传 null 表示清空。 */
+  function selectTemplate(template: RoutineTemplate | null): void {
+    pendingTemplate.value = template;
+  }
+
   function start(template: RoutineTemplate, opts?: StartOptions): void {
     requireRoutine().start(
       template,
@@ -359,6 +369,7 @@ export const useRoutineStore = defineStore('routine', () => {
     parsing,
     lastParse,
     notice,
+    pendingTemplate,
     // getters
     session,
     currentProgress,
@@ -371,6 +382,7 @@ export const useRoutineStore = defineStore('routine', () => {
     parse,
     createTemplate,
     addTemplate,
+    selectTemplate,
     start,
     startProgress,
     complete,

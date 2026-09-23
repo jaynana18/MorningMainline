@@ -14,6 +14,8 @@
   /* 新增（不修改既有变量取值）：会话页用到的语义色。 */
   --mm-ink-soft: rgba(29, 31, 29, 0.6);
   --mm-red: #e5484d;
+  /* 预览页状态卡的「糟糕情况」底色：Swift `coral.opacity(0.22)`。 */
+  --mm-coral-soft: rgba(246, 143, 110, 0.22);
   --mm-radius: 20px;
 }
 
@@ -149,6 +151,22 @@ body {
 .mm-card__name {
   font-size: 16px;
   font-weight: 800;
+}
+
+/* TaskLineCard 的 42×42 白底圆角图标（Swift `.frame(42×42).background(.white.opacity(0.72), RoundedRectangle(13))`）。 */
+.mm-card__symbol {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--mm-ink);
+}
+
+.mm-card__symbol--round {
+  border-radius: 50%;
 }
 
 .mm-card__summary {
@@ -576,4 +594,117 @@ body {
   right: 6px;
   transform: rotate(-18deg);
   opacity: 0.7;
+}
+
+/* ==========================================================================
+   预览页（PreviewView / iOS ContentView TaskLinePreviewView 440–782）
+   ========================================================================== */
+
+.mm-preview-heading {
+  margin: 6px 0 5px;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+/* 状态行卡片 */
+.mm-status-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 18px;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+/* 两栏：本次计划（1fr） + 原计划（compact 132 / regular 320） */
+.mm-preview-plans {
+  display: grid;
+  grid-template-columns: 1fr 132px;
+  align-items: start;
+  gap: 12px;
+}
+
+@media (min-width: 980px) {
+  .mm-preview-plans {
+    grid-template-columns: 1fr 320px;
+  }
+}
+
+/* planOptionCard：prominent → padding 18 + softSky；否则 padding 11 + cream */
+.mm-plan-card {
+  padding: 11px;
+  border-radius: 22px;
+  background: var(--mm-cream);
+  text-align: left;
+}
+
+.mm-plan-card--prominent {
+  padding: 18px;
+  background: var(--mm-soft-sky);
+}
+
+.mm-plan-card--compact {
+  padding: 11px;
+}
+
+.mm-plan-card__title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.mm-plan-card__title--sm {
+  font-size: 16px;
+}
+
+.mm-divider {
+  height: 1px;
+  margin: 12px 0;
+  background: rgba(29, 31, 29, 0.14);
+}
+
+/* 倒推摘要 */
+.mm-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mm-summary__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 3px 0;
+  font-size: 13px;
+}
+
+/* 倒推行 / forward 步骤行 */
+.mm-plan-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.mm-plan-row__title {
+  flex: 1;
+  font-size: 13px;
+}
+
+.mm-plan-row__time {
+  font-size: 12px;
+  color: var(--mm-ink-soft);
+}
+
+.mm-input--num {
+  width: 72px;
+}
+
+.mm-big-time {
+  margin: 2px 0;
+  font-size: 22px;
+  font-weight: 800;
 }

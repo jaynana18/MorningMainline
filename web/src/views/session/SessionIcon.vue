@@ -85,6 +85,35 @@
     <template v-else-if="name === 'chevron-up'">
       <path d="M4.2 9.7L8 6l3.8 3.7" />
     </template>
+    <template v-else-if="name === 'sun'">
+      <circle cx="8" cy="8" r="3.1" />
+      <path d="M8 1.4v1.8M8 12.8v1.8M1.4 8h1.8M12.8 8h1.8M3.4 3.4l1.3 1.3M11.3 11.3l1.3 1.3M12.6 3.4l-1.3 1.3M4.7 11.3l-1.3 1.3" />
+    </template>
+    <template v-else-if="name === 'book'">
+      <path d="M8 3.6C6.6 2.7 4.8 2.5 3 2.9v8.6c1.8-.4 3.6-.2 5 .7 1.7-.9 3.5-1.1 5-.7V2.9c-1.8-.4-3.6-.2-5 .7z" />
+      <path d="M8 3.6v8.6" />
+    </template>
+    <template v-else-if="name === 'car'">
+      <path d="M2.6 9.4l1-3.2A1.4 1.4 0 0 1 4.9 5.2h6.2a1.4 1.4 0 0 1 1.3.9l1 3.3" />
+      <path d="M2.2 9.4h11.6v2.4H2.2z" />
+      <path d="M4.4 11.8v1.2M11.6 11.8v1.2" />
+      <circle cx="4.7" cy="9.9" r="0.9" />
+      <circle cx="11.3" cy="9.9" r="0.9" />
+    </template>
+    <template v-else-if="name === 'list'">
+      <path d="M5.8 4.2h7.2M5.8 8h7.2M5.8 11.8h7.2" />
+      <path d="M3 4.2h.02M3 8h.02M3 11.8h.02" :stroke-width="strokeWidth * 1.3" />
+    </template>
+    <template v-else-if="name === 'calendar-warning'">
+      <rect x="2.6" y="3.4" width="10.8" height="9.6" rx="2" />
+      <path d="M2.6 6.4h10.8M5.6 2.4v2M10.4 2.4v2" />
+      <path d="M8 7.9v2.2M8 11.8h.02" />
+    </template>
+    <template v-else-if="name === 'calendar-clock'">
+      <rect x="2.6" y="3.4" width="10.8" height="9.6" rx="2" />
+      <path d="M2.6 6.4h10.8M5.6 2.4v2M10.4 2.4v2" />
+      <path d="M8 8v1.7l1.2.9" />
+    </template>
   </svg>
 </template>
 

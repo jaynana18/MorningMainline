@@ -105,3 +105,36 @@ export function reorderableItems(session: RoutineSession): StepProgress[] {
       item.id !== session.activeProgressID,
   );
 }
+
+/**
+ * SF Symbol 名 → web 图标名（`SessionIcon.vue` 的 `name` 取值）。
+ *
+ * Swift 用 SF Symbols（`sun.max.fill` 等），Web 无法渲染系统符号，统一映射为内联 SVG 图标。
+ * 未收录 / 空值 → `target`，与 Swift `store.session?.templateSymbol ?? "target"` 的兜底一致。
+ */
+const SYMBOL_TO_ICON: Readonly<Record<string, string>> = {
+  'sun.max.fill': 'sun',
+  'book.closed.fill': 'book',
+  'car.fill': 'car',
+  'list.bullet.clipboard.fill': 'list',
+  'list.bullet': 'list',
+  'calendar.badge.exclamationmark': 'calendar-warning',
+  'calendar.badge.clock': 'calendar-clock',
+  'exclamationmark.triangle.fill': 'warning',
+  'clock.arrow.circlepath': 'clock',
+  'checkmark.circle.fill': 'check',
+  'flag.fill': 'flag',
+  sparkles: 'sparkles',
+  circle: 'circle',
+  'arrow.up.circle.fill': 'arrow-up',
+  'arrow.right': 'chevron-right',
+  target: 'target',
+};
+
+export function iconNameForSymbol(symbol: string | null | undefined): string {
+  if (symbol === null || symbol === undefined) {
+    return 'target';
+  }
+  const mapped: string | undefined = SYMBOL_TO_ICON[symbol];
+  return mapped ?? 'target';
+}
