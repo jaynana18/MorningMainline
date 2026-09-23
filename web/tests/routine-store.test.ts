@@ -309,6 +309,34 @@ describe('stores/routine — ensureReady（web 特有的异步 init 窗口）', 
     await store.ensureReady();
     expect(store.ready).toBe(true);
   });
+
+  it('权限请求永不 settle 也不阻塞 ready（否则首页会静默卡在「正在载入…」）', async () => {
+    const bridge = createMockBridge();
+    // 模拟用户忽略通知弹窗：requestPermission 不 settle → 桥的 Promise 也不 settle。
+    bridge.requestNotificationAuthorization = () => new Promise<boolean>(() => {});
+    const { store } = setup(bridge);
+    // ready 若被该调用 gate，init() 将永不 resolve；用超时把「挂起」变成「失败」。
+    await expect(
+      Promise.race([
+        store.init(),
+        new Promise((_resolve, reject) =>
+          setTimeout(() => reject(new Error('init 被权限请求阻塞')), 1_000),
+        ),
+      ]),
+    ).resolves.toBeUndefined();
+    expect(store.ready).toBe(true);
+    expect(store.templates.length).toBeGreaterThan(0);
+  });
+
+  it('权限授权抛错不外溢成 init 失败（ready 仍为 true，且无未处理 rejection）', async () => {
+    const bridge = createMockBridge();
+    bridge.requestNotificationAuthorization = async () => {
+      throw new Error('权限被拒');
+    };
+    const { store } = setup(bridge);
+    await expect(store.init()).resolves.toBeUndefined();
+    expect(store.ready).toBe(true);
+  });
 });
 
 describe('stores/routine — 视图辅助', () => {

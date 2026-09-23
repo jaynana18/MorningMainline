@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createBridge } from '../src/platform/bridge';
 import { createBrowserBridge } from '../src/platform/browser';
 import { createMockBridge } from '../src/platform/mock';
@@ -55,6 +55,25 @@ describe('platform/browser — 浏览器宿主能力与降级', () => {
   it('无 Notification 时 requestNotificationAuthorization 返回 false', async () => {
     const bridge = createBrowserBridge();
     await expect(bridge.requestNotificationAuthorization()).resolves.toBe(false);
+  });
+
+  it('requestPermission 永不 settle 时超时兜底（返回 false，不永久挂起）', async () => {
+    // 真实场景：用户在通知弹窗上既不点允许也不点拒绝（忽略/切走），Promise 不 settle。
+    vi.useFakeTimers();
+    const original = Reflect.get(globalThis, 'Notification');
+    try {
+      Reflect.set(globalThis, 'Notification', {
+        permission: 'default',
+        requestPermission: () => new Promise<never>(() => {}),
+      });
+      const bridge = createBrowserBridge();
+      const pending = bridge.requestNotificationAuthorization();
+      await vi.advanceTimersByTimeAsync(5_000);
+      await expect(pending).resolves.toBe(false);
+    } finally {
+      Reflect.set(globalThis, 'Notification', original);
+      vi.useRealTimers();
+    }
   });
 
   it('presentNotification / replaceNotifications 在缺能力时静默 no-op（不抛错）', async () => {

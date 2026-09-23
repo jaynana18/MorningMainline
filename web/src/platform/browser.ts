@@ -31,6 +31,15 @@ const DEVICE_ID_KEY = 'morning-mainline.device-id';
 const SNAPSHOT_KEY = 'morning-mainline.local-snapshot.v2';
 const NOTIFICATION_SESSION_KEY = 'morning-mainline.notifications.session-id';
 
+/**
+ * `Notification.requestPermission()` 的兜底超时。
+ *
+ * 该 API 在若干真实场景下**不会 settle**：用户在弹窗上既不点允许也不点拒绝（直接忽略/切走），
+ * 或浏览器因「非用户手势触发」而挂起 UI。裸 `await` 会让调用方永久挂起。
+ * 桥的契约要求每个方法都在有限时间内 settle，故此处 race 一个超时（超时按未授权处理）。
+ */
+const PERMISSION_TIMEOUT_MS = 5_000;
+
 /** 纯内存兜底（无 IndexedDB 的宿主，例如 Node 测试环境）。 */
 function createMemoryStore(): KeyValueStore {
   const map = new Map<string, unknown>();
@@ -170,7 +179,13 @@ export class BrowserBridge implements PlatformBridge {
       return false;
     }
     try {
-      const permission = await Notification.requestPermission();
+      // 必须 race 超时：`requestPermission()` 在用户忽略弹窗时可能永不 settle（见常量注释）。
+      const permission = await Promise.race<NotificationPermission>([
+        Notification.requestPermission(),
+        new Promise<NotificationPermission>((resolve) => {
+          setTimeout(() => resolve('default'), PERMISSION_TIMEOUT_MS);
+        }),
+      ]);
       return permission === 'granted';
     } catch {
       return false;
