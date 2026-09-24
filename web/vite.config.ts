@@ -9,9 +9,28 @@ import vue from '@vitejs/plugin-vue';
 // 相对 index.html 所在目录解析，`file://` 下才能正确加载。
 export default defineConfig({
   base: './',
-  plugins: [vue()],
+  plugins: [
+    vue(),
+    {
+      name: 'wkwebview-classic-entry',
+      apply: 'build',
+      transformIndexHtml(html) {
+        return html.replace('<script type="module" crossorigin', '<script defer');
+      },
+    },
+  ],
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    // WKWebView 从 bundle 读取的是 file:// 页面。WebKit 会把本地 ES module
+    // 当成 opaque origin，样式能加载但入口 <script type="module"> 会被 CORS
+    // 拦下，最终只剩一张米色空画布。这里产出单文件 IIFE，并在构建 HTML 中
+    // 改成普通 defer 脚本；开发服务器仍保持 Vite 的 module/HMR 行为。
+    rollupOptions: {
+      output: {
+        format: 'iife',
+        inlineDynamicImports: true,
+      },
+    },
   },
 });
