@@ -469,12 +469,20 @@ extension WebHost {
             emit(event: "app.state", payload: ["visible": visible])
         }
 
-        /// 投递单个事件；`evaluateJavaScript` 带回非 nil error 且未达尝试上界时，延迟后重试。
+        /// 投递单个事件。先在 JS 内判断入口函数是否存在，未就绪时返回 `false`，避免 WebKit
+        /// 把正常的启动等待窗口打印成 TypeError；返回 false 或执行报错时再延迟重试。
         private func deliver(event: String, payload: [String: Any], attempt: Int) {
             guard let json = Self.jsonString(payload), let webView else { return }
-            let script = "window.__mainlineEmit('\(event)', \(json))"
-            webView.evaluateJavaScript(script) { [weak self] _, error in
-                guard let error else { return } // 成功：无 error。
+            let script = """
+            (function () {
+              if (typeof window.__mainlineEmit !== 'function') { return false; }
+              window.__mainlineEmit('\(event)', \(json));
+              return true;
+            })()
+            """
+            webView.evaluateJavaScript(script) { [weak self] result, error in
+                let delivered = error == nil && (result as? Bool) == true
+                guard !delivered else { return }
                 guard let self, attempt < Self.maxDeliveryAttempts else { return }
                 Task { @MainActor in
                     try? await Task.sleep(
