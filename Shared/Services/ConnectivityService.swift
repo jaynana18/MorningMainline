@@ -8,7 +8,15 @@ final class ConnectivityService: NSObject, WCSessionDelegate {
     private let session = WCSession.default
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
-    var onSnapshot: ((RoutineSnapshot) -> Void)?
+    private var pendingOutgoingSnapshot: RoutineSnapshot?
+    private var pendingIncomingSnapshot: RoutineSnapshot?
+    var onSnapshot: ((RoutineSnapshot) -> Void)? {
+        didSet {
+            guard let pendingIncomingSnapshot else { return }
+            self.pendingIncomingSnapshot = nil
+            onSnapshot?(pendingIncomingSnapshot)
+        }
+    }
 
     override init() {
         super.init()
@@ -18,9 +26,16 @@ final class ConnectivityService: NSObject, WCSessionDelegate {
     }
 
     func publish(_ snapshot: RoutineSnapshot) {
+        pendingOutgoingSnapshot = snapshot
+        flushPendingSnapshot()
+    }
+
+    private func flushPendingSnapshot() {
         guard session.activationState == .activated,
+              let snapshot = pendingOutgoingSnapshot,
               let data = try? encoder.encode(snapshot)
         else { return }
+        pendingOutgoingSnapshot = nil
 
         let payload: [String: Any] = ["snapshot": data]
         try? session.updateApplicationContext(payload)
@@ -38,7 +53,11 @@ final class ConnectivityService: NSObject, WCSessionDelegate {
         _ session: WCSession,
         activationDidCompleteWith activationState: WCSessionActivationState,
         error: Error?
-    ) {}
+    ) {
+        Task { @MainActor [weak self] in
+            self?.flushPendingSnapshot()
+        }
+    }
 
     nonisolated func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
         decode(message)
@@ -57,7 +76,14 @@ final class ConnectivityService: NSObject, WCSessionDelegate {
             let data = payload["snapshot"] as? Data,
             let snapshot = try? JSONDecoder().decode(RoutineSnapshot.self, from: data)
         else { return }
-        Task { @MainActor [weak self] in self?.onSnapshot?(snapshot) }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            if let onSnapshot {
+                onSnapshot(snapshot)
+            } else {
+                pendingIncomingSnapshot = snapshot
+            }
+        }
     }
 
     #if os(iOS)
@@ -75,4 +101,3 @@ final class ConnectivityService {
     func publish(_ snapshot: RoutineSnapshot) {}
 }
 #endif
-

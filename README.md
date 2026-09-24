@@ -8,7 +8,7 @@
 - 两种计划方式：从现在顺排，或根据截止时间、步骤时长和缓冲倒推
 - 一句话创建：解析常见的“9点到宜家 路上40分钟 留15分钟堵车”式输入，并生成可编辑前的任务线预览
 - 执行中只突出一个当前主线；完成、延后两分钟、临时加事都能直接操作
-- 延后或临时加事会优先消耗缓冲；缓冲用完后明确显示预计晚多久
+- 延后或临时加事会让后续时间线整体后移；固定缓冲只作为计划安全垫，不会被消耗
 - Apple Watch 可以先选择要执行的任务线，再完成当前步骤或延后两分钟
 - 本地通知：App 不在前台时仍能收到节点提醒
 - iPhone/iPad 自适应布局，支持 iPad 台前调度窗口缩放
@@ -26,11 +26,19 @@ Tests/    核心时间规则测试
 ## 打开工程
 
 ```bash
+cd web
+npm install
+npm run build
+cd ..
 xcodegen generate
 open MorningMainline.xcodeproj
 ```
 
-工程当前已配置个人开发 Team，可直接在已登记的 iPhone、iPad 与 Apple Watch 上调试。个人免费 Team 不支持 iCloud Capability，因此当前签名配置未启用 entitlements；iPhone 与 Apple Watch 仍可通过 WatchConnectivity 同步，iPhone 与 iPad 可分别独立使用。
+`web/dist` 是本地构建产物，不提交到 Git。首次检出或更新 Vue 页面后，需要先执行上述 Web 构建，再重新生成 Xcode 工程。
+
+工程当前已配置个人开发 Team，可直接在已登记的 iPhone、iPad 与 Apple Watch 上调试。当前未启用 iCloud；iPhone 与 Apple Watch 通过 WatchConnectivity 同步，iPhone 与 iPad 可分别独立使用。
+
+项目保留 App Group，用于主 App 与 iPhone 主屏 Widget、Apple Watch 表盘 Widget 在同一设备上共享当前任务快照。App Group 与 iCloud 是两项独立能力，表盘 Widget 不依赖 iCloud。
 
 若后续加入付费 Apple Developer Program，请在 iOS 与 Watch Target 中重新启用对应 entitlements，并为应用开启 iCloud Key-value storage，即可恢复跨 iPhone、iPad 与 Apple Watch 的 iCloud 最终同步。
 

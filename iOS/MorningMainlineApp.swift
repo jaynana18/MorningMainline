@@ -21,6 +21,23 @@ struct MorningMainlineApp: App {
         let role: DeviceRole = .phone
         #endif
         _store = StateObject(wrappedValue: RoutineStore(deviceRole: role))
+
+        Self.configureRoutineParsing()
+    }
+
+    /// 注册云端解析服务，让「一句话创建」在一句话规则没读全时交给大模型补位。
+    ///
+    /// Key 不写在源码里，依次从环境变量 `COSMO_MIND_API_KEY`、Info.plist 的
+    /// `CosmoMindAPIKey` 读取；都取不到时仍会注册服务，用网关可能存在的免鉴权通道。
+    /// 任何失败（超时、鉴权错、格式不对）都会自动回退本机规则，不影响创建流程。
+    ///
+    /// 想回到纯本机规则模式：注释掉下面这行即可。
+    private static func configureRoutineParsing() {
+        RoutineParsing.current.enhanced = RemoteRoutineParsingService(
+            configuration: .cosmoMind(
+                apiKey: RemoteRoutineParsingService.Configuration.apiKeyFromEnvironment()
+            )
+        )
     }
 
     // MARK: - 冷启动通知回跳入口

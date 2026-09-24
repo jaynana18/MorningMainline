@@ -33,8 +33,11 @@ targets:
         PRODUCT_NAME: MorningMainline
         TARGETED_DEVICE_FAMILY: "1,2"
         INFOPLIST_FILE: iOS/Info.plist
+        CODE_SIGN_ENTITLEMENTS: iOS/MorningMainline.entitlements
     dependencies:
       - target: MorningMainlineWatch
+        embed: true
+      - target: MainlineiOSWidget
         embed: true
   MorningMainlineWatch:
     type: application
@@ -52,6 +55,40 @@ targets:
         PRODUCT_NAME: MorningMainlineWatch
         INFOPLIST_FILE: Watch/Info.plist
         SKIP_INSTALL: YES
+        CODE_SIGN_ENTITLEMENTS: Watch/MorningMainlineWatch.entitlements
+    dependencies:
+      - target: MainlineWatchWidget
+        embed: true
+  MainlineWatchWidget:
+    type: app-extension
+    platform: watchOS
+    deploymentTarget: "10.0"
+    sources:
+      - path: WatchWidget
+      - path: Shared/Services/AppGroupSharedStore.swift
+      - path: Shared/Widget
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jaynana.MorningMainline.watchkitapp.widget
+        PRODUCT_NAME: MainlineWatchWidget
+        INFOPLIST_FILE: WatchWidget/Info.plist
+        SKIP_INSTALL: YES
+        CODE_SIGN_ENTITLEMENTS: WatchWidget/MainlineWatchWidget.entitlements
+  MainlineiOSWidget:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: iOSWidget
+      - path: Shared/Services/AppGroupSharedStore.swift
+      - path: Shared/Widget
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jaynana.MorningMainline.widget
+        PRODUCT_NAME: MainlineiOSWidget
+        INFOPLIST_FILE: iOSWidget/Info.plist
+        SKIP_INSTALL: YES
+        CODE_SIGN_ENTITLEMENTS: iOSWidget/MainlineiOSWidget.entitlements
   MorningMainlineTests:
     type: bundle.unit-test
     platform: iOS
@@ -66,11 +103,18 @@ targets:
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/MorningMainline.app/MorningMainline"
         BUNDLE_LOADER: "$(TEST_HOST)"
 schemes:
-  MorningMainline:
+  MorningMainlineApp:
     build:
       targets:
         MorningMainline: all
-        MorningMainlineWatch: all
+    run:
+      config: Debug
     test:
       targets:
         - MorningMainlineTests
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
