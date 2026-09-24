@@ -388,10 +388,14 @@ extension WebHost {
         /// `parse.withModel`：转发现有的增强解析服务。
         /// **安全边界（§7）：API Key 只留在原生侧，绝不进 web 产物。**
         private func parseWithModel(_ input: String) async -> Any? {
-            guard let enhanced = RoutineParsing.current.enhanced,
-                  let parsed = try? await enhanced.parse(input, now: Date())
-            else { return nil }
-            return Self.encodeParseResultWire(parsed)
+            guard let enhanced = RoutineParsing.current.enhanced else { return nil }
+            do {
+                guard let parsed = try await enhanced.parse(input, now: Date()) else { return nil }
+                return Self.encodeParseResultWire(parsed)
+            } catch {
+                RemoteRoutineParsingService.log("智能解析请求失败：\(error.localizedDescription)")
+                return nil
+            }
         }
 
         /// 编码成与 `webview.ts:decodeParseResultWire` 逐字段一致的线格式。

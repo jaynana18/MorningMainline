@@ -134,6 +134,16 @@ describe('stores/routine — createTemplate（deadline 有无两分支）', () =
 });
 
 describe('stores/routine — parse（走管线 + 降级提示）', () => {
+  it('本机规则已完整识别 → 不调用模型，也不误报智能解析失败', async () => {
+    const bridge = createMockBridge({ capabilities: { modelParsing: true } });
+    const { store } = setup(bridge);
+    await store.init();
+    const result = await store.parse(CANONICAL);
+    expect(result.source).toBe('rule');
+    expect(bridge.parseWithModelCalls).toHaveLength(0);
+    expect(store.notice).toBeNull();
+  });
+
   it('规范输入 → 3 个任务 + 截止 18:30；无智能能力时提示降级且不调用模型', async () => {
     const { store, bridge } = setup();
     await store.init();

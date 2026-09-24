@@ -252,10 +252,14 @@ export const useRoutineStore = defineStore('routine', () => {
     try {
       const pipeline = new RoutineParsingPipeline({ tz });
       const modelAvailable = bridge.capabilities.modelParsing;
+      let modelAttempted = false;
       if (modelAvailable) {
         const enhanced: RoutineParsingService = {
           source: 'enhanced',
-          parse: (text) => bridge.parseWithModel(text),
+          parse: (text) => {
+            modelAttempted = true;
+            return bridge.parseWithModel(text);
+          },
         };
         pipeline.setEnhanced(enhanced);
       }
@@ -278,7 +282,7 @@ export const useRoutineStore = defineStore('routine', () => {
 
       if (!modelAvailable) {
         notice.value = '当前环境未接入智能解析，已使用本机规则识别。';
-      } else if (raw.source === 'rule') {
+      } else if (modelAttempted && raw.source === 'rule') {
         notice.value = '智能解析未返回更完整的结果，已回退本机规则识别。';
       }
       return enriched;
