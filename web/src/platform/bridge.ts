@@ -72,6 +72,8 @@ export interface PlatformBridge {
   requestNotificationAuthorization(): Promise<boolean>;
   replaceNotifications(session: RoutineSession | null): Promise<void>;
   presentNotification(payload: NotificationPayload): Promise<void>;
+  /** 告知原生前台页内提醒通道是否已就绪；未就绪时原生保留系统横幅兜底。 */
+  setForegroundReminderReady(ready: boolean): Promise<void>;
 
   /** 云端语义解析。宿主无能力时 resolve(null)，调用方静默回退纯规则。 */
   parseWithModel(input: string): Promise<ParseResult | null>;

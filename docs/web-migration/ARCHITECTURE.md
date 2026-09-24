@@ -88,6 +88,7 @@ MorningMainline/
 | `notifications.requestAuthorization` | — | `{ granted }` | `UNUserNotificationCenter.requestAuthorization` |
 | `notifications.replace` | `{ session \| null }` | — | `ReminderScheduler.replaceNotifications` |
 | `notifications.present` | `{ title, body, level }` | — | 前台即时通知（应用内弹窗由 Vue 自绘，此接口用于降级/兜底） |
+| `notifications.foregroundReady` | `{ ready }` | — | Vue 页内提醒通道 ready 时抑制前台系统横幅；未就绪/加载失败时保留横幅兜底 |
 | `parse.withModel` | `{ input }` | `ParseResult \| null` | 原生 `RemoteRoutineParsingService` 代发，**Key 不进程外** |
 
 **事件**（Swift → JS 主动推送）：
@@ -243,6 +244,8 @@ applyIncoming(s: RoutineSnapshot): boolean
 | --- | --- | --- |
 | 应用内弹窗 | Vue（`views/` 内的 Overlay 组件） | App/页面在前台、任务切换、deadline 里程碑到点 |
 | 系统通知 | WebView 宿主 → 原生 `ReminderScheduler`；浏览器宿主 → Notification API / Web Push | App 在后台或锁屏 |
+
+WebView 前台只有在 Vue 提醒引擎通过 `notifications.foregroundReady` 明确声明 ready 后才抑制系统横幅；冷启动 attach 前、页面加载失败、导航重载或 Web 内容进程终止时必须恢复系统横幅兜底，避免页内通道不可用时静默漏提醒。
 
 文案与排期**必须逐字复刻** `ReminderScheduler`：每个未完成 task 在其 `dueAt > now` 时排一条；`targetDeadline` 的 8 个里程碑 −10/−5/−3/−1/0/+2/+4/+6 分钟；`0` 及正偏移用自定义音 `deadline-overdue.aiff`（watchOS 用系统音）。应用内弹窗与系统通知共用同一套文案生成函数，避免两处漂移。
 

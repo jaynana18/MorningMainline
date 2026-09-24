@@ -36,6 +36,7 @@ export class MockBridge implements PlatformBridge {
   readonly writeSnapshotCalls: RoutineSnapshot[] = [];
   readonly replaceNotificationsCalls: (RoutineSession | null)[] = [];
   readonly presentNotificationCalls: NotificationPayload[] = [];
+  readonly foregroundReminderReadyStates: boolean[] = [];
   readonly parseWithModelCalls: string[] = [];
   deviceInfoCallCount = 0;
   requestAuthorizationCallCount = 0;
@@ -94,6 +95,10 @@ export class MockBridge implements PlatformBridge {
 
   async presentNotification(payload: NotificationPayload): Promise<void> {
     this.presentNotificationCalls.push({ ...payload });
+  }
+
+  async setForegroundReminderReady(ready: boolean): Promise<void> {
+    this.foregroundReminderReadyStates.push(ready);
   }
 
   async parseWithModel(input: string): Promise<ParseResult | null> {

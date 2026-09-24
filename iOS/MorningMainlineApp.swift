@@ -61,15 +61,13 @@ struct MorningMainlineApp: App {
             return true
         }
 
-        /// 与 `WebHost.Coordinator.userNotificationCenter(_:willPresent:)` 是**同一策略**：
-        /// **前台不放行横幅是刻意的** —— 前台通道交给 Vue 侧页内弹窗
-        /// （`web/src/stores/reminders.ts` 的引擎），若这里再放行，同一条提醒会出现两份。
-        /// （交叉引用：`iOS/WebHost.swift` 的同名实现也返回 `[]`。）
+        /// 此时 WebHost 尚未 attach，Vue 页内提醒通道一定还不可用，因此必须保留系统横幅兜底。
+        /// attach 后由 `WebHost.Coordinator` 接替，并仅在 Vue 明确 ready 后抑制横幅。
         nonisolated func userNotificationCenter(
             _ center: UNUserNotificationCenter,
             willPresent notification: UNNotification
         ) async -> UNNotificationPresentationOptions {
-            []
+            [.banner, .sound]
         }
 
         /// 冷启动那一击：此时 `WebHost` 尚未 attach，没有可投递的 WebView，遂把载荷存入信箱，

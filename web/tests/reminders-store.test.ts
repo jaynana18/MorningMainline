@@ -95,6 +95,18 @@ afterEach(() => {
 });
 
 describe('stores/reminders — 前台弹窗通道', () => {
+  it('start/stop 向宿主声明页内提醒通道 ready 状态', async () => {
+    const bridge = makeBridge({ backgroundNotification: true });
+    const { reminders } = setup(bridge);
+
+    vi.setSystemTime(new Date(2026, 7, 13, 11, 45, 0));
+    await reminders.start();
+    expect(bridge.foregroundReminderReadyStates).toEqual([true]);
+
+    reminders.stop();
+    expect(bridge.foregroundReminderReadyStates).toEqual([true, false]);
+  });
+
   it('到点弹窗 + 去重 + milestone 0 的文案/级别/声音', async () => {
     const bridge = makeBridge({ backgroundNotification: false });
     const { reminders } = setup(bridge);

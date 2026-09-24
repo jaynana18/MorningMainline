@@ -194,10 +194,16 @@ export const useRemindersStore = defineStore('reminders', () => {
 
     timer = setInterval(() => tick(), REMINDER_TICK_MS);
     tick();
+
+    // 订阅、计时器和首次 tick 都已就位。从这一刻起，前台提醒由页内弹窗承接，
+    // 原生可以安全抑制横幅。
+    void bridge.setForegroundReminderReady(true);
   }
 
   /** 停止引擎（幂等）。清计时器、退订。 */
   function stop(): void {
+    // 先撤销 ready：若卸载窗口内恰好有系统通知到达，应让原生横幅兜底，不能静默吞掉。
+    void bridge.setForegroundReminderReady(false);
     if (timer !== null) {
       clearInterval(timer);
       timer = null;

@@ -278,6 +278,14 @@ export class WebViewBridge implements PlatformBridge {
     }
   }
 
+  async setForegroundReminderReady(ready: boolean): Promise<void> {
+    try {
+      await this.call('notifications.foregroundReady', { ready });
+    } catch (error) {
+      this.warn('notifications.foregroundReady', error);
+    }
+  }
+
   async parseWithModel(input: string): Promise<ParseResult | null> {
     try {
       const result = await this.call('parse.withModel', { input });

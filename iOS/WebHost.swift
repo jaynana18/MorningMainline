@@ -116,6 +116,10 @@ extension WebHost {
         /// JS 侧 `window.__mainlineEmit` 是否已就绪。`didFinish` 置 true；开始导航 / 加载失败置 false。
         private var isPageReady = false
 
+        /// Vue 页内提醒引擎是否已经完成订阅并可承接前台提醒。
+        /// 只有为 true 时才抑制系统横幅；否则由系统横幅兜底，避免 WebView 失败时静默漏提醒。
+        private var isForegroundReminderReady = false
+
         /// 页面就绪前到达的待发事件（按到达顺序）。详见 `maxPendingEvents`。
         private var pendingEvents: [(event: String, payload: [String: Any])] = []
 
@@ -321,6 +325,10 @@ extension WebHost {
                 await presentLocalNotification(params)
                 reply(id: id)
 
+            case "notifications.foregroundReady":
+                isForegroundReminderReady = params["ready"] as? Bool == true
+                reply(id: id)
+
             case "parse.withModel":
                 let parsed = await parseWithModel(params["input"] as? String ?? "")
                 reply(id: id, result: parsed ?? NSNull())
@@ -486,6 +494,7 @@ extension WebHost {
         ) {
             Task { @MainActor in
                 self.isPageReady = false
+                self.isForegroundReminderReady = false
             }
         }
 
@@ -522,6 +531,7 @@ extension WebHost {
         ) {
             Task { @MainActor in
                 self.isPageReady = false
+                self.isForegroundReminderReady = false
             }
         }
 
@@ -533,6 +543,15 @@ extension WebHost {
         ) {
             Task { @MainActor in
                 self.isPageReady = false
+                self.isForegroundReminderReady = false
+            }
+        }
+
+        /// Web 内容进程被系统终止后，页内提醒已不可能工作；立即恢复系统横幅兜底。
+        nonisolated func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+            Task { @MainActor in
+                self.isPageReady = false
+                self.isForegroundReminderReady = false
             }
         }
 
@@ -558,20 +577,19 @@ extension WebHost {
 
         /// `willPresent` **只在 App 处于前台时**被调用。
         ///
-        /// 前台通道交由 WebView 承载的 Vue 侧页内弹窗（`web/src/stores/reminders.ts` 的引擎）负责展示；
-        /// 若这里再放行横幅，同一条提醒会出现两份（ARCHITECTURE §6「应用内弹窗覆盖前台、
-        /// 系统通知覆盖后台/锁屏」）。因此前台一律不放行（返回 `[]`）。
+        /// Vue 页内提醒引擎 ready 后抑制横幅，避免同一条提醒出现两份；若页面尚未就绪、加载失败
+        /// 或 Web 内容进程已终止，则恢复系统横幅兜底，避免前台静默漏提醒。
         ///
         /// 这里**故意不加 `.list`**：前台通道既然交给页内弹窗，就不该再往通知中心留一份副本。
         ///
-        /// 交叉引用：`MorningMainlineApp.AppDelegate` 的同名实现也返回 `[]`（同一策略）——
-        /// 冷启动到 attach 之间由 AppDelegate 担任 delegate，attach 之后由本 Coordinator 担任，
-        /// 两处必须保持同一前台策略，否则窗口切换的瞬间会出现行为不一致。
+        /// 冷启动到 attach 之间由 AppDelegate 担任 delegate，并始终放行横幅；attach 之后由本
+        /// Coordinator 接替，再依据页内提醒通道的 ready 状态动态裁决。
         nonisolated func userNotificationCenter(
             _ center: UNUserNotificationCenter,
             willPresent notification: UNNotification
         ) async -> UNNotificationPresentationOptions {
-            []
+            let pageCanPresent = await MainActor.run { self.isForegroundReminderReady }
+            return pageCanPresent ? [] : [.banner, .sound]
         }
 
         /// attach 之后到达的通知点击：直接 emit 给 JS（此时 delegate 已由本 Coordinator 担任）。

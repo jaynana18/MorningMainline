@@ -215,6 +215,10 @@ export class BrowserBridge implements PlatformBridge {
     }
   }
 
+  async setForegroundReminderReady(): Promise<void> {
+    // 浏览器宿主没有原生 willPresent；前台去重由本文件的可见性判断负责。
+  }
+
   async parseWithModel(): Promise<ParseResult | null> {
     // §7：无代理时一律返回 null，调用方回退纯规则；绝不在此暴露任何 API Key。
     return null;
