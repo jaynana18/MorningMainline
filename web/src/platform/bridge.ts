@@ -79,6 +79,9 @@ export interface PlatformBridge {
   /** 返回取消订阅函数。 */
   onSnapshotChanged(cb: (snapshot: RoutineSnapshot) => void): () => void;
   onNotificationOpened(cb: (payload: NotificationOpenedPayload) => void): () => void;
+  /** App/页面前后台状态变化（事件 `app.state`）。返回取消订阅函数。
+   *  订阅时会**立即**收到当前已知状态（若已知），随后每次变化再回调。 */
+  onAppStateChanged(cb: (visible: boolean) => void): () => void;
 }
 
 /**

@@ -123,6 +123,12 @@ extension WebHost {
         /// `@Published` 的 sink 是同步触发的，一次性标记即可覆盖那一次变更。
         private var suppressNextSnapshotEmit = false
 
+        /// 前后台通知观察者 token（`didEnterBackground` / `willEnterForeground`）。
+        ///
+        /// 持有 token 是为了让观察者在本对象存活期间保持注册；闭包内一律 `[weak self]`，
+        /// 因此 `self` 销毁后闭包自动哑火，即便 token 未显式移除也不会有强引用环。
+        private var appStateObservers: [NSObjectProtocol] = []
+
         init(store: RoutineStore) {
             self.store = store
             super.init()
@@ -151,8 +157,78 @@ extension WebHost {
                     )
                 }
 
+            // MARK: 通知 delegate（接力：AppDelegate → Coordinator）
+
             // 让 `notifications.present` 在 App 前台也能横幅展示，并接收点击回跳。
+            //
+            // 接力关系：`MorningMainlineApp.AppDelegate` 在 `didFinishLaunching` 返回前先设好 delegate，
+            // 负责接住「启动 → 本次 attach」这个窗口（冷启动那一击，晚设会被系统丢弃）；
+            // attach 之后由本 Coordinator 接替 delegate。两条路径最终都汇到同一个 `notification.opened` 事件。
             UNUserNotificationCenter.current().delegate = self
+
+            // 接管通知信箱：本 Coordinator 成为唯一消费者，从此通知点击直接交付、不再经队列。
+            //
+            // 用 `installConsumer` 而非「drain 一次」是为了**从根上消除竞态**：`AppDelegate` 的
+            // `didReceive` 里那个 `MainActor.run` 闭包若排在本次 attach **之后**才落地，一次性 drain
+            // 会漏掉它（那一条会写进再无人 drain 的信箱、永久丢失）。安装消费者后：attach 前到达的
+            // 积压在安装瞬间当场交付；attach 后到达的由 `store` 直接调用消费者交付。全部顺序闭合。
+            //
+            // 此刻 `isPageReady` 通常仍是 `false`，交付进来的事件会被 `emit` 入队、等 `didFinish` flush ——
+            // 这正是想要的效果：冷启动那次点击不会因为 WebView 尚未就绪而丢。
+            NotificationInbox.installConsumer { [weak self] items in
+                for item in items {
+                    self?.emit(event: "notification.opened", payload: item)
+                }
+            }
+
+            // MARK: 前后台状态（原生权威告知 JS）
+
+            // **为什么需要原生显式信号**：JS 侧唯一可用的 `document.visibilityState` /
+            // `visibilitychange` 在 WKWebView 里可靠性无法保证 —— App 进入后台时 WKWebView
+            // 未必同步派发可见性变化，`visibilityState` 可能停在 `"visible"` 不动。因此前后台
+            // 由原生（唯一权威来源）通过 `app.state` 事件显式告知 JS，JS 侧不再依赖 `visibilityState`。
+            //
+            // **进入前台的三条路径，缺一不可**：
+            // - `from background`：`willEnterForeground` 覆盖；
+            // - `首次启动`：不触发 `willEnterForeground`，由 `didFinish` 时按真实态补发；
+            // - `.inactive → .active`：**只能靠 `didBecomeActive` 覆盖** —— 例如系统通知授权弹窗、
+            //   Face ID、来电横幅、控制中心、App 切换器都会让 App 短暂 `.inactive` 再回到 `.active`，
+            //   这一段**既不触发** `willEnterForeground` **也不是**页面加载（`didFinish`）。
+            //   （`web/src/stores/routine.ts:228` 的 `requestNotificationAuthorization()` 不 await，
+            //   会弹系统授权弹窗，正是这条路径的真实触发源。）
+            //   漏掉它的后果就是 R1 静默失效：`.inactive` 时若把态发成 `false`，JS 会把提醒全推给
+            //   系统通道，而两处 `willPresent` 前台都返回 `[]`，用户在前台看不到任何提醒，直到
+            //   下次真正进出后台才自愈。故必须补 `didBecomeActive`。
+            //
+            // **刻意不加 `willResignActive`**：`.active → .inactive` 期间（拉下控制中心、来电横幅等）
+            // **不**发 `visible:false` —— 此时 App 仍是前后台意义上的前台、页面仍然可见，不该把提醒
+            // 推给系统通道。我们只观察 `didEnterBackground`（真正的后台）。
+            //
+            // **幂等**：从后台回来时 `willEnterForeground(true)` 与 `didBecomeActive(true)` 会各发一次
+            // `true`；JS 侧 `applyVisibility` 命中 `next === visible.value` 会提前 return，重复无害。
+            //
+            // 用闭包 + `Task { @MainActor in }` 而非 `@objc` selector：避开与 `@MainActor` 隔离的摩擦。
+            appStateObservers.append(NotificationCenter.default.addObserver(
+                forName: UIApplication.didEnterBackgroundNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in self?.emitAppState(visible: false) }
+            })
+            appStateObservers.append(NotificationCenter.default.addObserver(
+                forName: UIApplication.willEnterForegroundNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in self?.emitAppState(visible: true) }
+            })
+            appStateObservers.append(NotificationCenter.default.addObserver(
+                forName: UIApplication.didBecomeActiveNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in self?.emitAppState(visible: true) }
+            })
 
             Self.loadStartPage(in: webView)
         }
@@ -373,6 +449,18 @@ extension WebHost {
             deliver(event: event, payload: payload, attempt: 1)
         }
 
+        /// 把前后台状态显式推给 JS（`app.state` 事件，载荷 `["visible": Bool]`）。
+        ///
+        /// 线格式契约（与 `web/src/platform/webview.ts` 的 `handleEmit` 的 `app.state` 分支严格一致，不得擅改）：
+        /// - 事件名：`"app.state"`
+        /// - 载荷：`["visible": <Bool>]`，键名必须是 `"visible"`
+        ///
+        /// 复用 `emit(event:payload:)`，因此自动继承「页面就绪前入队 / `didFinish` 后按序 flush /
+        /// `evaluateJavaScript` 失败延迟重试」的全部投递保障，不另起投递路径。
+        private func emitAppState(visible: Bool) {
+            emit(event: "app.state", payload: ["visible": visible])
+        }
+
         /// 投递单个事件；`evaluateJavaScript` 带回非 nil error 且未达尝试上界时，延迟后重试。
         private func deliver(event: String, payload: [String: Any], attempt: Int) {
             guard let json = Self.jsonString(payload), let webView else { return }
@@ -410,6 +498,18 @@ extension WebHost {
                 self.pendingEvents.removeAll()
                 for item in buffered {
                     self.deliver(event: item.event, payload: item.payload, attempt: 1)
+                }
+                // 页面就绪后按真实态补发一次。**只在 `.active` 时发 `true`，其余情况什么都不发**：
+                // - 它覆盖**首次启动**：冷启动不会触发 `willEnterForeground`，光靠观察者 JS 收不到初始态。
+                // - **`.inactive` / `.background` 时故意不发**：`.inactive` 是过渡态（授权弹窗 / Face ID /
+                //   来电横幅…），JS 侧默认值本就是 `true`，此刻发 `false` 是**主动写入错误信息**（即 R1
+                //   静默失效）；改由 `didBecomeActive` 在真正转正时纠正。`.background` 时也无需补发：
+                //   `didEnterBackground` 已经（或将）发出 `false`，它会经既有队列/flush 正常送达。
+                //
+                // 必须在 flush 循环**之后**：顺序保证「先补历史事件，再纠正当前态」，
+                // 否则一条迟到的陈旧 `app.state` 可能覆盖掉刚补的真实态。
+                if UIApplication.shared.applicationState == .active {
+                    self.emitAppState(visible: true)
                 }
             }
         }
@@ -463,6 +563,10 @@ extension WebHost {
         /// 系统通知覆盖后台/锁屏」）。因此前台一律不放行（返回 `[]`）。
         ///
         /// 这里**故意不加 `.list`**：前台通道既然交给页内弹窗，就不该再往通知中心留一份副本。
+        ///
+        /// 交叉引用：`MorningMainlineApp.AppDelegate` 的同名实现也返回 `[]`（同一策略）——
+        /// 冷启动到 attach 之间由 AppDelegate 担任 delegate，attach 之后由本 Coordinator 担任，
+        /// 两处必须保持同一前台策略，否则窗口切换的瞬间会出现行为不一致。
         nonisolated func userNotificationCenter(
             _ center: UNUserNotificationCenter,
             willPresent notification: UNNotification
@@ -470,16 +574,17 @@ extension WebHost {
             []
         }
 
+        /// attach 之后到达的通知点击：直接 emit 给 JS（此时 delegate 已由本 Coordinator 担任）。
+        ///
+        /// 载荷抽取与冷启动窗口共用 `NotificationInbox.notificationOpenedPayload(from:)`，
+        /// 保证两条路径产出的 `notification.opened` 载荷**逐字一致**，不留两份拷贝。
         nonisolated func userNotificationCenter(
             _ center: UNUserNotificationCenter,
             didReceive response: UNNotificationResponse
         ) async {
-            let info = response.notification.request.content.userInfo
-            var payload: [String: Any] = [:]
-            if let value = info["progressID"] as? String { payload["progressID"] = value }
-            if let value = info["sessionID"] as? String { payload["sessionID"] = value }
-            if let value = info["minuteOffset"] as? Int { payload["minuteOffset"] = value }
-            guard !payload.isEmpty else { return }
+            guard let payload = NotificationInbox.notificationOpenedPayload(from: response) else {
+                return
+            }
             await MainActor.run {
                 self.emit(event: "notification.opened", payload: payload)
             }
@@ -521,5 +626,86 @@ extension WebHost {
                 forMainFrameOnly: true
             )
         }()
+    }
+}
+
+// MARK: - 通知信箱
+
+extension WebHost {
+    /// 接住「App 启动 → WebView attach」窗口内到达的通知点击，并在 attach 后交给消费者直接投递。
+    ///
+    /// 背景：`UNUserNotificationCenter` 的 delegate 若不在 `didFinishLaunching` 返回前设好，
+    /// 冷启动点通知的那一次 `didReceive` 会被系统丢弃。改由 `MorningMainlineApp.AppDelegate`
+    /// 在最早入口设好 delegate 后，它本身**没有**可投递的 WebView（`WebHost` 尚未 attach），
+    /// 遂把载荷暂存到本信箱；待 `Coordinator.attach(to:)` 安装消费者时当场交付
+    /// （若页面未就绪则入队，等 `didFinish` flush）。attach 之后的点击由消费者直接交付、不再经队列。
+    ///
+    /// **为什么需要「消费者」而非一次性 drain**：`AppDelegate.didReceive` 那个 `MainActor.run`
+    /// 闭包若排在 `attach` **之后**才落地，而 attach 已经 drain 过一次（信箱当时为空），一次性 drain
+    /// 会漏掉这条 —— 它会被写进再无人 drain 的信箱、永久丢失（`attach`/`drain` 全仓仅一处调用，不会自愈）。
+    /// 安装消费者后：attach 前积压的当场交付；attach 后到达的直接交付。全部顺序闭合。
+    @MainActor
+    enum NotificationInbox {
+        /// 待回跳载荷的条数上界。
+        ///
+        /// 消费者安装**之前**才需要此队列：页面长期加载不出来（web 产物缺失 / 持续崩溃）且尚未 attach
+        /// 时，若持续累积就会无界增长占用内存。封顶 32 与 `Coordinator.maxPendingEvents`
+        /// 对称；超界时丢最旧的 —— 用户当下的意图以最新一次点击为准。
+        private static let maxPending = 32
+
+        /// 已安装的消费者。非 nil 表示 attach 已完成，此后载荷直接交付、不再入队。
+        private static var consumer: (([[String: Any]]) -> Void)?
+
+        /// 待回跳的通知点击载荷（按到达顺序）；仅在消费者安装前使用。
+        private static var pending: [[String: Any]] = []
+
+        /// 安装消费者并**接管**信箱：先把当前积压当场交付，此后到达的直接交付、不再经队列。
+        ///
+        /// 只允许安装一次（由 `Coordinator.attach(to:)` 调用）。安装即接管：残留的 `pending` 全部
+        /// 取出清空并立即交付，保证 attach 前到达的点击不丢。
+        static func installConsumer(_ c: @escaping ([[String: Any]]) -> Void) {
+            consumer = c
+            let items = pending
+            pending.removeAll()
+            if !items.isEmpty {
+                c(items)
+            }
+        }
+
+        /// 接住一次通知点击。载荷为空（三个字段都取不到）时忽略。
+        ///
+        /// 若消费者已安装则**直接交付**（途经队列反而引入延迟与遗漏风险）；否则入队，
+        /// 超 `maxPending` 时丢最旧。
+        static func store(response: UNNotificationResponse) {
+            guard let payload = notificationOpenedPayload(from: response) else { return }
+            if let consumer {
+                consumer([payload])
+                return
+            }
+            if pending.count >= maxPending {
+                pending.removeFirst()
+            }
+            pending.append(payload)
+        }
+
+        /// `UNNotificationResponse` → `notification.opened` 载荷。**载荷抽取的单一来源**：
+        /// 冷启动窗口的 `NotificationInbox.store` 与 attach 之后的
+        /// `Coordinator.userNotificationCenter(_:didReceive:)` 两处共用此函数，不再各留一份拷贝。
+        ///
+        /// 逻辑与原 `Coordinator` 实现逐字一致：读 `userInfo` 的 `progressID`（String）、
+        /// `sessionID`（String）、`minuteOffset`（Int），取到哪个填哪个；三者都取不到返回 `nil`。
+        ///
+        /// 标记 `nonisolated`：这是纯函数，不触碰任何 actor 状态，因此既能被 `@MainActor` 的
+        /// `store` 直接调用，也能被 `nonisolated` 的 `didReceive` 直接调用，无需额外的 actor 跳转。
+        nonisolated static func notificationOpenedPayload(
+            from response: UNNotificationResponse
+        ) -> [String: Any]? {
+            let info = response.notification.request.content.userInfo
+            var payload: [String: Any] = [:]
+            if let value = info["progressID"] as? String { payload["progressID"] = value }
+            if let value = info["sessionID"] as? String { payload["sessionID"] = value }
+            if let value = info["minuteOffset"] as? Int { payload["minuteOffset"] = value }
+            return payload.isEmpty ? nil : payload
+        }
     }
 }

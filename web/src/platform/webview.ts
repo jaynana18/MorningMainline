@@ -96,6 +96,17 @@ export class WebViewBridge implements PlatformBridge {
    * 不可合并，故按到达顺序保留队列。
    */
   private pendingNotificationEvents: NotificationOpenedPayload[] = [];
+
+  /**
+   * 订阅者未就绪时暂存的最近一次前后台状态（单一槽位）。
+   *
+   * 与快照同理：这是**状态**而非事件流，只留最新即可。用于「原生在 store 订阅
+   * `onAppStateChanged` 之前就 emit 了 `app.state`（例如冷启动时原生补发当前态）」的窗口。
+   */
+  private pendingAppState: boolean | null = null;
+
+  private readonly appStateListeners = new Set<(visible: boolean) => void>();
+
   constructor() {
     this.install();
   }
@@ -151,6 +162,19 @@ export class WebViewBridge implements PlatformBridge {
       } else {
         for (const listener of this.notificationListeners) {
           listener(data);
+        }
+      }
+      return;
+    }
+    if (event === 'app.state') {
+      // 严格 `=== true` 判定：脏载荷（缺失/非布尔）一律视为「不在前台」，
+      // 宁可保守按后台处理，也不要把非法值误判成前台而漏发系统通知。
+      const visible = (payload as { visible?: unknown })?.visible === true;
+      if (this.appStateListeners.size === 0) {
+        this.pendingAppState = visible;
+      } else {
+        for (const listener of this.appStateListeners) {
+          listener(visible);
         }
       }
     }
@@ -294,6 +318,23 @@ export class WebViewBridge implements PlatformBridge {
     this.pendingNotificationEvents = [];
     return () => {
       this.notificationListeners.delete(cb);
+    };
+  }
+
+  onAppStateChanged(cb: (visible: boolean) => void): () => void {
+    this.install();
+    this.appStateListeners.add(cb);
+    // 补发订阅前到达的最近一次前后台状态（若存在）。此处**只调 cb**：状态是单一槽位，
+    // 补发仅面向本次新订阅者；若广播给集合内的老订阅者，会把同一状态重复投递（老订阅者
+    // 早已通过实时分发收到过）。此刻集合内也只有它，两种写法可观测结果一致，明确只投给
+    // 本次订阅者，避免语义含糊。补发后置空，防止后续订阅者重复消费。
+    if (this.pendingAppState !== null) {
+      const visible = this.pendingAppState;
+      this.pendingAppState = null;
+      cb(visible);
+    }
+    return () => {
+      this.appStateListeners.delete(cb);
     };
   }
 

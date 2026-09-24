@@ -48,6 +48,9 @@ export class MockBridge implements PlatformBridge {
 
   private readonly snapshotListeners = new Set<(snapshot: RoutineSnapshot) => void>();
   private readonly notificationListeners = new Set<(payload: NotificationOpenedPayload) => void>();
+  private readonly appStateListeners = new Set<(visible: boolean) => void>();
+  /** 最近一次已知前后台状态；null = 尚无来源（订阅时不立即回调）。 */
+  private lastAppState: boolean | null = null;
 
   constructor(options: MockBridgeOptions = {}) {
     this.host = options.host ?? 'browser';
@@ -112,6 +115,17 @@ export class MockBridge implements PlatformBridge {
     };
   }
 
+  onAppStateChanged(cb: (visible: boolean) => void): () => void {
+    this.appStateListeners.add(cb);
+    // 订阅时若有已知状态立即回调（与 WebView / 浏览器宿主语义一致）。
+    if (this.lastAppState !== null) {
+      cb(this.lastAppState);
+    }
+    return () => {
+      this.appStateListeners.delete(cb);
+    };
+  }
+
   // ---- 测试辅助：手工推送事件，模拟原生/Watch 侧变更 ----
   emitSnapshotChanged(snapshot: RoutineSnapshot): void {
     for (const listener of this.snapshotListeners) {
@@ -122,6 +136,13 @@ export class MockBridge implements PlatformBridge {
   emitNotificationOpened(payload: NotificationOpenedPayload): void {
     for (const listener of this.notificationListeners) {
       listener(payload);
+    }
+  }
+
+  emitAppStateChanged(visible: boolean): void {
+    this.lastAppState = visible;
+    for (const listener of this.appStateListeners) {
+      listener(visible);
     }
   }
 }

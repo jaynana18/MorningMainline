@@ -173,22 +173,21 @@ describe('stores/reminders — 后台到点（系统通道）', () => {
 });
 
 describe('stores/reminders — 前台去重（不补弹过时提醒）', () => {
-  it('hidden→visible 不补弹「引擎没盯着」期间到点的提醒，之后新到点仍正常弹', async () => {
+  it('hidden→visible 不补弹「引擎没盯着」期间到点的提醒，之后新到点仍正常弹（桥驱动）', async () => {
     const bridge = makeBridge({ backgroundNotification: false });
     const { reminders } = setup(bridge);
 
-    // 无 document → 引擎按前台启动（visible=true），watchedSince=11:45。
+    // 桥未给初始态（mock lastAppState=null）→ 引擎按前台启动（visible=true），watchedSince=11:45。
     vi.setSystemTime(new Date(2026, 7, 13, 11, 45, 0));
     await reminders.start();
 
-    vi.stubGlobal('document', { visibilityState: 'hidden' });
-    reminders.syncVisibility();
+    // 走真实桥路径：原生发 {visible:false} → applyVisibility。
+    bridge.emitAppStateChanged(false);
     expect(reminders.visible).toBe(false);
 
     // 模拟 iOS 后台：JS 计时器被挂起、期间不 tick；系统时间直接跳到 12:05。
     vi.setSystemTime(new Date(2026, 7, 13, 12, 5, 0));
-    vi.stubGlobal('document', { visibilityState: 'visible' });
-    reminders.syncVisibility(); // → watchedSince=12:05，再 tick
+    bridge.emitAppStateChanged(true); // → watchedSince=12:05，再 tick
 
     // 11:50/55/57/59、12:00/02/04 共 7 条早于 watchedSince → 全部 skipped，无弹窗。
     expect(reminders.active).toBeNull();
@@ -201,6 +200,66 @@ describe('stores/reminders — 前台去重（不补弹过时提醒）', () => {
     reminders.tick();
     expect(reminders.active?.key).toBe(`deadline:${SID}:6`);
     expect(reminders.stats.local).toBe(1);
+  });
+
+  it('恢复时刻仅 30s 余量：命中「重建 watchedSince」不变式，不靠 VISIBLE_CATCH_UP_MS 兜底（桥驱动）', async () => {
+    const bridge = makeBridge({ backgroundNotification: false });
+    const { reminders } = setup(bridge);
+
+    // 桥未给初始态（mock lastAppState=null）→ 引擎按前台启动（visible=true），watchedSince=11:45。
+    vi.setSystemTime(new Date(2026, 7, 13, 11, 45, 0));
+    await reminders.start();
+
+    // 走真实桥路径：原生发 {visible:false} → applyVisibility。
+    bridge.emitAppStateChanged(false);
+    expect(reminders.visible).toBe(false);
+
+    // 模拟 iOS 后台：JS 计时器被挂起、期间不 tick；系统时间直接跳到 12:00:30 再回前台。
+    vi.setSystemTime(new Date(2026, 7, 13, 12, 0, 30));
+    bridge.emitAppStateChanged(true); // → watchedSince=12:00:30，再 tick
+
+    // 8 个里程碑 fireAt：11:50 / 11:55 / 11:57 / 11:59 / 12:00 / 12:02 / 12:04 / 12:06。
+    // 恢复时刻 12:00:30 之前到点的只有前 5 条（含 12:00 那条）→ 全部 skipped，无弹窗。
+    //
+    // 关键（30s 余量的意图）：那条 12:00 的里程碑距恢复时刻只有 30s。若有人删掉
+    // applyVisibility 里的 `if (wasHidden && next) { watchedSince = new Date(); }`（不重建
+    // watchedSince），它既不是 staleForEngine（watchedSince 停在 11:45，fireAt 12:00 >= 11:45），
+    // 也不必被 staleForNow 挡（30s < 90s）→ 必然弹出 → 本用例变红。
+    // 因此只要 VISIBLE_CATCH_UP_MS > 30_000，本用例就对「重建 watchedSince」这条不变式保持
+    // 杀伤力；即便有人把闸门从 90s 调小到 31s/45s/60s 也不会失效。请勿把它降到 30s 及以下。
+    expect(reminders.active).toBeNull();
+    expect(reminders.queue).toHaveLength(0);
+    expect(reminders.stats.local).toBe(0);
+    expect(reminders.stats.skipped).toBe(5);
+
+    // 证明重建 watchedSince 只挡「过去」、不吞「未来」：12:02 的里程碑随后仍正常弹窗。
+    vi.setSystemTime(milestoneAt(2));
+    reminders.tick();
+    expect(reminders.active?.key).toBe(`deadline:${SID}:2`);
+    expect(reminders.stats.local).toBe(1);
+  });
+
+  it('hidden 期间到点由系统通道消化，回前台不再补弹（两通道互斥、不重复，桥驱动）', async () => {
+    const bridge = makeBridge({ backgroundNotification: false });
+    const { reminders } = setup(bridge);
+
+    vi.setSystemTime(new Date(2026, 7, 13, 11, 45, 0));
+    await reminders.start();
+
+    bridge.emitAppStateChanged(false);
+    // 与上一条不同：这里 hidden 期间**仍 tick**（模拟浏览器宿主后台仍在跑），
+    // -10..0 共 5 条经系统通道投递并标记。
+    reminders.tick(milestoneAt(0));
+    expect(reminders.stats.system).toBe(5);
+    expect(bridge.presentNotificationCalls).toHaveLength(5);
+
+    vi.setSystemTime(milestoneAt(0));
+    bridge.emitAppStateChanged(true); // 回前台：watchedSince=12:00，tick
+    // 已由系统通道标记的那 5 条不会再从弹窗通道补一遍；local 不增、system 不再增。
+    expect(reminders.stats.local).toBe(0);
+    expect(reminders.stats.system).toBe(5);
+    expect(reminders.active).toBeNull();
+    expect(bridge.presentNotificationCalls).toHaveLength(5);
   });
 
   it('可见但 JS 被冻结后恢复：到点超过 VISIBLE_CATCH_UP_MS 不补弹（不依赖 watchedSince）', async () => {
@@ -224,6 +283,44 @@ describe('stores/reminders — 前台去重（不补弹过时提醒）', () => {
     expect(reminders.queue).toHaveLength(0);
     expect(reminders.stats.local).toBe(0);
     expect(reminders.stats.skipped).toBe(dueCount);
+  });
+});
+
+describe('stores/reminders — 前后台来源为桥（app.state）', () => {
+  it('start() 时桥立即给出 visible:false → store 的 visible 为 false，后续到点走系统通道', async () => {
+    const bridge = makeBridge({ backgroundNotification: false });
+    // 订阅建立前桥已有当前态（false）。
+    bridge.emitAppStateChanged(false);
+    const { reminders } = setup(bridge);
+
+    vi.setSystemTime(new Date(2026, 7, 13, 11, 45, 0));
+    await reminders.start();
+
+    // 「订阅即得当前值」这条路真的通了。
+    expect(reminders.visible).toBe(false);
+
+    reminders.tick(milestoneAt(0));
+    expect(reminders.active).toBeNull();
+    expect(reminders.queue).toHaveLength(0);
+    expect(reminders.stats.system).toBe(5);
+    expect(bridge.presentNotificationCalls).toHaveLength(5);
+  });
+
+  it('stop() 后 emitAppStateChanged(true) 不再影响 store（退订生效）', async () => {
+    const bridge = makeBridge({ backgroundNotification: false });
+    const { reminders } = setup(bridge);
+
+    vi.setSystemTime(new Date(2026, 7, 13, 11, 45, 0));
+    await reminders.start();
+
+    bridge.emitAppStateChanged(false);
+    expect(reminders.visible).toBe(false);
+
+    reminders.stop();
+    bridge.emitAppStateChanged(true);
+
+    // 已退订：状态不再被桥改写。
+    expect(reminders.visible).toBe(false);
   });
 });
 

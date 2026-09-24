@@ -228,6 +228,21 @@ export class BrowserBridge implements PlatformBridge {
   onNotificationOpened(): () => void {
     return () => {};
   }
+
+  onAppStateChanged(cb: (visible: boolean) => void): () => void {
+    // 订阅时立即给出当前态（与 WebView 宿主语义对齐：两种宿主都「订阅即得当前值」）。
+    cb(isPageForeground());
+    if (typeof document === 'undefined') {
+      return () => {};
+    }
+    const listener = (): void => {
+      cb(isPageForeground());
+    };
+    document.addEventListener('visibilitychange', listener);
+    return () => {
+      document.removeEventListener('visibilitychange', listener);
+    };
+  }
 }
 
 /** 工厂：供 `bridge.ts` 的 `createBridge()` 调用。 */

@@ -304,6 +304,81 @@ describe('platform/webview — Bridge 事件暂存（修掉冷启动窗口静默
     expect(received[0].progressID).toBe('p5');
     expect(received[received.length - 1].progressID).toBe('p68');
   });
+
+  it('app.state 暂存：订阅前 emit {visible:false} → 订阅时立即收到 false（订阅即得当前值）', () => {
+    stubWebViewWindow();
+    const bridge = new WebViewBridge();
+    window.__mainlineEmit!('app.state', { visible: false });
+
+    const received: boolean[] = [];
+    bridge.onAppStateChanged((visible) => received.push(visible));
+    expect(received).toEqual([false]);
+  });
+
+  it('app.state 只留最新：订阅前 emit false 再 true → 订阅只收到一次 true', () => {
+    stubWebViewWindow();
+    const bridge = new WebViewBridge();
+    window.__mainlineEmit!('app.state', { visible: false });
+    window.__mainlineEmit!('app.state', { visible: true });
+
+    const received: boolean[] = [];
+    bridge.onAppStateChanged((visible) => received.push(visible));
+    expect(received).toEqual([true]);
+  });
+
+  it('app.state 订阅后实时分发多次；取消订阅后不再收到', () => {
+    stubWebViewWindow();
+    const bridge = new WebViewBridge();
+    const received: boolean[] = [];
+    const off = bridge.onAppStateChanged((visible) => received.push(visible));
+
+    window.__mainlineEmit!('app.state', { visible: false });
+    window.__mainlineEmit!('app.state', { visible: true });
+    expect(received).toEqual([false, true]);
+
+    off();
+    window.__mainlineEmit!('app.state', { visible: false });
+    expect(received).toEqual([false, true]);
+  });
+
+  it('app.state 脏载荷按 false 处理（严格 === true 守卫）', () => {
+    stubWebViewWindow();
+    const bridge = new WebViewBridge();
+    const received: boolean[] = [];
+    bridge.onAppStateChanged((visible) => received.push(visible));
+
+    window.__mainlineEmit!('app.state', {});
+    window.__mainlineEmit!('app.state', { visible: 'yes' });
+    window.__mainlineEmit!('app.state', { visible: true });
+    // 前两条脏载荷 → false；第三条合法 → true。
+    expect(received).toEqual([false, false, true]);
+  });
+
+  it('回归：新增 app.state 分支不影响 snapshot.changed / notification.opened', () => {
+    stubWebViewWindow();
+    const bridge = new WebViewBridge();
+
+    const snapshots: number[] = [];
+    const notifications: NotificationOpenedPayload[] = [];
+    const appStates: boolean[] = [];
+    bridge.onSnapshotChanged((snapshot) => snapshots.push(snapshot.updatedAt.getTime()));
+    bridge.onNotificationOpened((payload) => notifications.push(payload));
+    bridge.onAppStateChanged((visible) => appStates.push(visible));
+
+    const updatedAt = new Date(1_700_000_000_000);
+    window.__mainlineEmit!('snapshot.changed', {
+      snapshot: encodeSnapshot(
+        createSnapshot({ templates: [], activeSession: null, updatedAt }),
+      ),
+    });
+    window.__mainlineEmit!('notification.opened', { progressID: 'p1' });
+    window.__mainlineEmit!('app.state', { visible: false });
+
+    // 三个通道各自收到自己那一条，互不串扰。
+    expect(snapshots).toEqual([updatedAt.getTime()]);
+    expect(notifications).toEqual([{ progressID: 'p1' }]);
+    expect(appStates).toEqual([false]);
+  });
 });
 
 describe('platform/browser — 前台去重第二层（页面可见时不发系统通知）', () => {

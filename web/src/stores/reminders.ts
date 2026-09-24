@@ -23,7 +23,6 @@ import { ref } from 'vue';
 import { defineStore } from 'pinia';
 import { allReminders, type ReminderMessage } from '../core/reminders';
 import type { PlatformBridge } from '../platform/bridge';
-import { isPageForeground } from '../platform/foreground';
 import { resolveStoreBridge, useRoutineStore } from './routine';
 
 // 重导出：视图层经本模块取用提醒数据类型（避免直接 import core/）。
@@ -50,7 +49,11 @@ export const useRemindersStore = defineStore('reminders', () => {
   const bridge: PlatformBridge = resolveStoreBridge();
 
   // ---- state ----
-  /** 页面可见性。默认 true；非 DOM 环境（无 document）保持 true。 */
+  /**
+   * 页面可见性。默认 true（桥回调到达前按前台处理）。来源是桥的 `app.state` 事件
+   * （`onAppStateChanged`），不再自行读 `document.visibilityState` —— 后者在 iOS WKWebView
+   * 里不可靠（后台可能不派发 `visibilitychange`）。外部/测试仍可直接赋值以构造决策用例。
+   */
   const visible = ref(true);
   /** 当前显示的弹窗（同一时刻至多一条）。 */
   const active = ref<ReminderMessage | null>(null);
@@ -69,7 +72,7 @@ export const useRemindersStore = defineStore('reminders', () => {
   // ---- 运行时句柄 ----
   let timer: ReturnType<typeof setInterval> | null = null;
   let unsubscribeNotificationOpened: (() => void) | null = null;
-  let visibilityListener: (() => void) | null = null;
+  let unsubscribeAppState: (() => void) | null = null;
   let started = false;
 
   /** 入队弹窗：`active` 为空则直接显示，否则压入队列；同 key 不重复入队。 */
@@ -144,13 +147,12 @@ export const useRemindersStore = defineStore('reminders', () => {
   }
 
   /**
-   * 读一次页面可见性并同步。`onVisibilityChange` 内部即调它，测试亦经此触发。
+   * 应用一次前后台状态（来源：桥的 `app.state` 事件）。
    *
    * 注意顺序：hidden → visible 时**先**重置 `watchedSince` **再** tick，否则会把
    * 刚切换瞬间就已过期的提醒也补弹出来。
    */
-  function syncVisibility(): void {
-    const next = isPageForeground();
+  function applyVisibility(next: boolean): void {
     if (next === visible.value) {
       return;
     }
@@ -186,26 +188,22 @@ export const useRemindersStore = defineStore('reminders', () => {
       };
     });
 
-    if (typeof document !== 'undefined') {
-      visible.value = isPageForeground();
-      visibilityListener = () => syncVisibility();
-      document.addEventListener('visibilitychange', visibilityListener);
-    }
+    // 前后台由桥驱动（`app.state` 事件）。桥会在订阅时**立即回调当前态**，
+    // 故不再手动读 `document.visibilityState`（在 iOS WKWebView 里不可靠）。
+    unsubscribeAppState = bridge.onAppStateChanged(applyVisibility);
 
     timer = setInterval(() => tick(), REMINDER_TICK_MS);
     tick();
   }
 
-  /** 停止引擎（幂等）。清计时器、移除监听、退订。 */
+  /** 停止引擎（幂等）。清计时器、退订。 */
   function stop(): void {
     if (timer !== null) {
       clearInterval(timer);
       timer = null;
     }
-    if (visibilityListener !== null && typeof document !== 'undefined') {
-      document.removeEventListener('visibilitychange', visibilityListener);
-    }
-    visibilityListener = null;
+    unsubscribeAppState?.();
+    unsubscribeAppState = null;
     unsubscribeNotificationOpened?.();
     unsubscribeNotificationOpened = null;
     watchedSince = null;
@@ -243,7 +241,6 @@ export const useRemindersStore = defineStore('reminders', () => {
     start,
     stop,
     tick,
-    syncVisibility,
     dismiss,
     dismissAll,
     clearFocusRequest,
