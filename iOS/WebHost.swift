@@ -88,13 +88,36 @@ final class WebHostController: UIViewController {
 extension WebHost {
     /// 桥的宿主侧：处理 JS → 原生调用，并把原生事件（快照变更 / 通知点击）推回 JS。
     @MainActor
-    final class Coordinator: NSObject, WKScriptMessageHandler, UNUserNotificationCenterDelegate {
+    final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate,
+        UNUserNotificationCenterDelegate {
         /// 注册名，必须与 `webview.ts:129` 的 `window.webkit?.messageHandlers?.mainline` 一致。
         private static let handlerName = "mainline"
+
+        /// `pendingEvents` 的条数上界。
+        ///
+        /// 事件积压只发生在「页面刚起步」的极短窗口（`didFinish` 之前，或 `didFinish` 之后
+        /// JS bundle 尚未执行完）。封顶是为了防止**页面长期加载失败**时队列无界增长占用内存；
+        /// 超界时丢最旧的（越旧的事件对已过时的 UI 越无意义）。
+        private static let maxPendingEvents = 32
+
+        /// 单次事件投递失败后的重试间隔（秒）。
+        private static let deliveryRetryInterval: TimeInterval = 0.25
+
+        /// 单次事件投递的最大尝试次数（配合间隔 ≈ 5s 总窗口）。
+        ///
+        /// 覆盖 `didFinish` 之后 JS bundle 仍在解析/执行、`window.__mainlineEmit` 尚未由 JS
+        /// `install()` 挂上的窗口——此时 `evaluateJavaScript` 会抛错，重试可补上。
+        private static let maxDeliveryAttempts = 20
 
         private let store: RoutineStore
         private weak var webView: WKWebView?
         private var snapshotSubscription: AnyCancellable?
+
+        /// JS 侧 `window.__mainlineEmit` 是否已就绪。`didFinish` 置 true；开始导航 / 加载失败置 false。
+        private var isPageReady = false
+
+        /// 页面就绪前到达的待发事件（按到达顺序）。详见 `maxPendingEvents`。
+        private var pendingEvents: [(event: String, payload: [String: Any])] = []
 
         /// 抑制「JS 自己写快照」引发的一次反向 emit，避免 `snapshot.write` ↔ `snapshot.changed` 回环。
         /// `@Published` 的 sink 是同步触发的，一次性标记即可覆盖那一次变更。
@@ -107,6 +130,7 @@ extension WebHost {
 
         func attach(to webView: WKWebView) {
             self.webView = webView
+            webView.navigationDelegate = self
 
             let controller = webView.configuration.userContentController
             controller.add(self, name: Self.handlerName)
@@ -334,9 +358,82 @@ extension WebHost {
         }
 
         /// 事件：`window.__mainlineEmit(event, payload)`。
+        ///
+        /// 页面（含 JS bundle）尚未就绪时**入队缓冲**，待 `didFinish`（或 JS 挂载补上后）flush。
+        /// 修掉的原缺陷：原先直接 `evaluateJavaScript` 并忽略错误，若此刻 `window.__mainlineEmit`
+        /// 尚未由 JS `install()` 挂上则会抛错、事件永久丢失（典型场景：用户点系统通知冷启动 App）。
         private func emit(event: String, payload: [String: Any]) {
-            guard let json = Self.jsonString(payload) else { return }
-            evaluate("window.__mainlineEmit('\(event)', \(json))")
+            guard isPageReady else {
+                if pendingEvents.count >= Self.maxPendingEvents {
+                    pendingEvents.removeFirst()
+                }
+                pendingEvents.append((event: event, payload: payload))
+                return
+            }
+            deliver(event: event, payload: payload, attempt: 1)
+        }
+
+        /// 投递单个事件；`evaluateJavaScript` 带回非 nil error 且未达尝试上界时，延迟后重试。
+        private func deliver(event: String, payload: [String: Any], attempt: Int) {
+            guard let json = Self.jsonString(payload), let webView else { return }
+            let script = "window.__mainlineEmit('\(event)', \(json))"
+            webView.evaluateJavaScript(script) { [weak self] _, error in
+                guard let error else { return } // 成功：无 error。
+                guard let self, attempt < Self.maxDeliveryAttempts else { return }
+                Task { @MainActor in
+                    try? await Task.sleep(
+                        nanoseconds: UInt64(Self.deliveryRetryInterval * 1_000_000_000)
+                    )
+                    self.deliver(event: event, payload: payload, attempt: attempt + 1)
+                }
+            }
+        }
+
+        // MARK: 导航代理（页面就绪态 + 待发事件 flush）
+
+        /// 开始导航：重新进入缓冲态（页面重载后 `window.__mainlineEmit` 需 JS 重新挂载）。
+        nonisolated func webView(
+            _ webView: WKWebView,
+            didStartProvisionalNavigation navigation: WKNavigation!
+        ) {
+            Task { @MainActor in
+                self.isPageReady = false
+            }
+        }
+
+        /// 页面加载完成：标记就绪，并按到达顺序 flush 待发队列。
+        /// 注意：`didFinish` 只保证文档加载完毕，JS bundle 可能仍在执行；未挂上时靠 `deliver` 重试补上。
+        nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            Task { @MainActor in
+                self.isPageReady = true
+                let buffered = self.pendingEvents
+                self.pendingEvents.removeAll()
+                for item in buffered {
+                    self.deliver(event: item.event, payload: item.payload, attempt: 1)
+                }
+            }
+        }
+
+        /// 加载失败：退回缓冲态，但**保留**待发队列（页面稍后可能重试成功，事件不应丢）。
+        nonisolated func webView(
+            _ webView: WKWebView,
+            didFailProvisionalNavigation navigation: WKNavigation!,
+            withError error: Error
+        ) {
+            Task { @MainActor in
+                self.isPageReady = false
+            }
+        }
+
+        /// 已提交导航阶段失败：同样退回缓冲态并保留队列。
+        nonisolated func webView(
+            _ webView: WKWebView,
+            didFail navigation: WKNavigation!,
+            withError error: Error
+        ) {
+            Task { @MainActor in
+                self.isPageReady = false
+            }
         }
 
         private func evaluate(_ script: String) {
@@ -359,11 +456,18 @@ extension WebHost {
 
         // MARK: 通知代理（前台展示 + 点击回跳）
 
+        /// `willPresent` **只在 App 处于前台时**被调用。
+        ///
+        /// 前台通道交由 WebView 承载的 Vue 侧页内弹窗（`web/src/stores/reminders.ts` 的引擎）负责展示；
+        /// 若这里再放行横幅，同一条提醒会出现两份（ARCHITECTURE §6「应用内弹窗覆盖前台、
+        /// 系统通知覆盖后台/锁屏」）。因此前台一律不放行（返回 `[]`）。
+        ///
+        /// 这里**故意不加 `.list`**：前台通道既然交给页内弹窗，就不该再往通知中心留一份副本。
         nonisolated func userNotificationCenter(
             _ center: UNUserNotificationCenter,
             willPresent notification: UNNotification
         ) async -> UNNotificationPresentationOptions {
-            [.banner, .sound]
+            []
         }
 
         nonisolated func userNotificationCenter(

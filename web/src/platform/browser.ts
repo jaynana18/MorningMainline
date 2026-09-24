@@ -16,6 +16,7 @@ import type {
   NotificationPayload,
   PlatformBridge,
 } from './bridge';
+import { isPageForeground } from './foreground';
 
 /** 键值持久化抽象：IndexedDB 可用时走 IDB，否则回落内存（单测/无 DOM 场景）。 */
 interface KeyValueStore {
@@ -199,6 +200,11 @@ export class BrowserBridge implements PlatformBridge {
 
   async presentNotification(payload: NotificationPayload): Promise<void> {
     if (typeof Notification === 'undefined' || Notification.permission !== 'granted') {
+      return;
+    }
+    // 前台去重（ARCHITECTURE §6）：页面可见时该提醒由应用内弹窗负责，这里不再重复打扰。
+    // 注意：这是第二层防线。第一层在 stores/reminders.ts 的引擎里（可见 → 弹窗，不可见 → 这里）。
+    if (isPageForeground()) {
       return;
     }
     try {

@@ -35,7 +35,8 @@ import { inferredDeadline, makeSteps, makeTemplate } from '../core/parser';
 import { RoutineParsingPipeline } from '../core/pipeline';
 import { isIncomplete } from '../core/session';
 import { RoutineStore } from '../core/store';
-import { createBridge, type PlatformBridge } from '../platform/bridge';
+import type { PlatformBridge } from '../platform/bridge';
+import { resolveBridge } from '../platform/hostBridge';
 
 // 重导出：视图层经 store 取用（避免直接 import core）。
 export { RECURRENCE_TITLES, RECURRENCES, PARSE_SOURCE_TITLES };
@@ -73,6 +74,19 @@ export function setRoutineBridge(bridge: PlatformBridge | null): void {
   bridgeOverride = bridge;
 }
 
+/**
+ * 取本 store 使用的宿主桥，并供同进程的其他 store（如 `stores/reminders.ts`）复用**同一实例**。
+ *
+ * 为什么必须是同一个：`WebViewBridge.install()` 会把自己挂到 `window.__mainlineReply` /
+ * `window.__mainlineEmit`（单一全局槽位），两个实例会互相覆盖，先建实例的 pending 调用
+ * 将永远等不到回执、逐个静默超时。详见 `platform/hostBridge.ts`。
+ *
+ * 仍以 `bridgeOverride`（`setRoutineBridge` 注入）优先，语义不变。
+ */
+export function resolveStoreBridge(): PlatformBridge {
+  return bridgeOverride ?? resolveBridge();
+}
+
 /** 时长格式化（逐字复刻 `iOS/ContentView.swift` 的 `formatMinutes`）。 */
 export function formatMinutes(seconds: number, includeSeconds = false): string {
   const rounded = Math.max(0, Math.round(seconds));
@@ -108,7 +122,7 @@ export interface CreateTemplateOptions {
 }
 
 export const useRoutineStore = defineStore('routine', () => {
-  const bridge: PlatformBridge = bridgeOverride ?? createBridge();
+  const bridge: PlatformBridge = resolveStoreBridge();
   const tz = DEFAULT_TIME_ZONE;
 
   // ---- state ----

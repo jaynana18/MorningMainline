@@ -1,8 +1,11 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createBridge } from '../src/platform/bridge';
+import type { NotificationOpenedPayload } from '../src/platform/bridge';
 import { createBrowserBridge } from '../src/platform/browser';
 import { createMockBridge } from '../src/platform/mock';
-import { decodeParseResultWire } from '../src/platform/webview';
+import { WebViewBridge, decodeParseResultWire } from '../src/platform/webview';
+import { isPageForeground } from '../src/platform/foreground';
+import { encodeSnapshot } from '../src/core/serialization';
 import { createSnapshot, createSession, createProgress, createStep } from '../src/core/types';
 
 describe('platform/bridge — 宿主探测', () => {
@@ -187,5 +190,153 @@ describe('platform — 会话线格式（encodeSession 走 Apple 参考秒）', 
     expect(restored?.activeSession?.revision).toBe(3);
     expect(restored?.activeSession?.progress[0].dueAt.getTime()).toBe(dueAt.getTime());
     expect(restored?.activeSession?.remainingBuffer).toBe(600);
+  });
+});
+
+describe('platform/foreground — isPageForeground（宿主无关前台判定）', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('无 document（node 默认）按前台处理', () => {
+    expect(isPageForeground()).toBe(true);
+  });
+
+  it('document.visibilityState = hidden → 非前台', () => {
+    vi.stubGlobal('document', { visibilityState: 'hidden' });
+    expect(isPageForeground()).toBe(false);
+  });
+
+  it('document.visibilityState = visible → 前台', () => {
+    vi.stubGlobal('document', { visibilityState: 'visible' });
+    expect(isPageForeground()).toBe(true);
+  });
+});
+
+describe('platform/webview — Bridge 事件暂存（修掉冷启动窗口静默丢事件）', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  /** 构造 WebView 宿主的假 window（含 messageHandlers.mainline），供 `install()` 挂入口。 */
+  function stubWebViewWindow(): void {
+    vi.stubGlobal('window', {
+      webkit: { messageHandlers: { mainline: { postMessage: () => {} } } },
+    });
+  }
+
+  it('订阅前到达的快照事件被暂存，订阅后补发且 updatedAt 正确', () => {
+    stubWebViewWindow();
+    const bridge = new WebViewBridge();
+    const updatedAt = new Date(1_700_000_000_000);
+    const encoded = encodeSnapshot(
+      createSnapshot({ templates: [], activeSession: null, updatedAt }),
+    );
+    // store.performInit() 尚未订阅时，原生冷启动 emit 的快照。
+    window.__mainlineEmit!('snapshot.changed', { snapshot: encoded });
+
+    const received: number[] = [];
+    bridge.onSnapshotChanged((snapshot) => received.push(snapshot.updatedAt.getTime()));
+    expect(received).toEqual([updatedAt.getTime()]);
+  });
+
+  it('订阅前到达的多个快照只保留最新一个（快照是状态而非事件流）', () => {
+    stubWebViewWindow();
+    const bridge = new WebViewBridge();
+    const firstAt = new Date(1_700_000_000_000);
+    const secondAt = new Date(1_700_000_900_000);
+    window.__mainlineEmit!('snapshot.changed', {
+      snapshot: encodeSnapshot(
+        createSnapshot({ templates: [], activeSession: null, updatedAt: firstAt }),
+      ),
+    });
+    window.__mainlineEmit!('snapshot.changed', {
+      snapshot: encodeSnapshot(
+        createSnapshot({ templates: [], activeSession: null, updatedAt: secondAt }),
+      ),
+    });
+
+    const received: number[] = [];
+    bridge.onSnapshotChanged((snapshot) => received.push(snapshot.updatedAt.getTime()));
+    expect(received).toEqual([secondAt.getTime()]);
+  });
+
+  it('订阅前到达的通知点击事件按到达顺序逐条补发', () => {
+    stubWebViewWindow();
+    const bridge = new WebViewBridge();
+    window.__mainlineEmit!('notification.opened', { progressID: 'p1' });
+    window.__mainlineEmit!('notification.opened', { minuteOffset: -1 });
+
+    const received: NotificationOpenedPayload[] = [];
+    bridge.onNotificationOpened((payload) => received.push(payload));
+    expect(received).toEqual([{ progressID: 'p1' }, { minuteOffset: -1 }]);
+  });
+
+  it('订阅后的事件直接分发，且不重复投递此前暂存的条目（总次数正好）', () => {
+    stubWebViewWindow();
+    const bridge = new WebViewBridge();
+    window.__mainlineEmit!('notification.opened', { progressID: 'pending' });
+
+    const received: NotificationOpenedPayload[] = [];
+    bridge.onNotificationOpened((payload) => received.push(payload));
+    expect(received).toEqual([{ progressID: 'pending' }]);
+
+    // 订阅后到达的新事件走直接分发，不得再把旧事件重新补一遍。
+    window.__mainlineEmit!('notification.opened', { progressID: 'live' });
+    expect(received).toEqual([{ progressID: 'pending' }, { progressID: 'live' }]);
+  });
+
+  it('暂存队列封顶 64：超界丢最旧，保留最新一次点击（首尾双断言）', () => {
+    stubWebViewWindow();
+    const bridge = new WebViewBridge();
+    // 无订阅者时 emit 69 条（p0..p68），远超 64 条上限。
+    const emitted = 69;
+    for (let index = 0; index < emitted; index += 1) {
+      window.__mainlineEmit!('notification.opened', { progressID: `p${index}` });
+    }
+
+    const received: NotificationOpenedPayload[] = [];
+    bridge.onNotificationOpened((payload) => received.push(payload));
+
+    expect(received).toHaveLength(64);
+    // 首条应为 p5：证明丢的是最旧 5 条（p0..p4），而非丢最新。
+    // 若把 shift() 误写成 pop()，末条会变成 p63 而非 p68 —— 该断言是本封顶的唯一防线。
+    expect(received[0].progressID).toBe('p5');
+    expect(received[received.length - 1].progressID).toBe('p68');
+  });
+});
+
+describe('platform/browser — 前台去重第二层（页面可见时不发系统通知）', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  /** 安装记录构造次数的假 Notification（permission=granted）。 */
+  function stubGrantedNotification(constructed: string[]): void {
+    class FakeNotification {
+      static permission: NotificationPermission = 'granted';
+      constructor(title: string) {
+        constructed.push(title);
+      }
+    }
+    vi.stubGlobal('Notification', FakeNotification);
+  }
+
+  it('页面可见时 presentNotification 不构造系统通知（交给页内弹窗）', async () => {
+    const constructed: string[] = [];
+    stubGrantedNotification(constructed);
+    vi.stubGlobal('document', { visibilityState: 'visible' });
+    const bridge = createBrowserBridge();
+    await bridge.presentNotification({ title: '该起床了', body: '去刷牙' });
+    expect(constructed).toHaveLength(0);
+  });
+
+  it('页面隐藏时 presentNotification 构造系统通知', async () => {
+    const constructed: string[] = [];
+    stubGrantedNotification(constructed);
+    vi.stubGlobal('document', { visibilityState: 'hidden' });
+    const bridge = createBrowserBridge();
+    await bridge.presentNotification({ title: '该起床了', body: '去刷牙' });
+    expect(constructed).toHaveLength(1);
   });
 });

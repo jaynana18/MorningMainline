@@ -29,6 +29,10 @@ import type {
 /** 桥调用超时（毫秒）。§4b.1 建议 5s。定义在此避免与 bridge.ts 形成值级循环依赖。 */
 export const BRIDGE_TIMEOUT_MS = 5000;
 
+/** 订阅者未就绪时暂存的「通知点击」事件上限。与原生 `WebHost.pendingEvents` 的 32 条上限对称。
+ *  超出时丢最旧：最新的一次点击才代表用户当下的意图。 */
+const MAX_PENDING_NOTIFICATION_EVENTS = 64;
+
 interface WebKitMessageHandler {
   postMessage(message: unknown): void;
 }
@@ -76,6 +80,22 @@ export class WebViewBridge implements PlatformBridge {
   private readonly fallback: PlatformBridge = createBrowserBridge();
   private installed = false;
 
+  /**
+   * 订阅者尚未就绪时到达的「最新快照」事件。
+   *
+   * 只保留最新：快照表达的是**状态**而非事件流，丢掉中间态不损失语义，
+   * 补发最新一份即可让订阅者看到权威状态。用于修掉「原生在页面刚加载、store 尚未
+   * 调 `onSnapshotChanged` 之前 emit」的静默丢弃窗口。
+   */
+  private pendingSnapshotEvent: RoutineSnapshot | null = null;
+
+  /**
+   * 订阅者尚未就绪时到达的「通知点击」事件。
+   *
+   * 通知点击是**一次性事件**（用户点了系统通知冷启动 App），语义上必须逐条投递、
+   * 不可合并，故按到达顺序保留队列。
+   */
+  private pendingNotificationEvents: NotificationOpenedPayload[] = [];
   constructor() {
     this.install();
   }
@@ -108,16 +128,30 @@ export class WebViewBridge implements PlatformBridge {
     if (event === 'snapshot.changed') {
       const snapshot = this.decodeSnapshotPayload((payload as { snapshot?: unknown })?.snapshot);
       if (snapshot) {
-        for (const listener of this.snapshotListeners) {
-          listener(snapshot);
+        if (this.snapshotListeners.size === 0) {
+          // 订阅者尚未就绪：暂存「最新快照」，待 onSnapshotChanged 补发（快照是状态而非事件流）。
+          this.pendingSnapshotEvent = snapshot;
+        } else {
+          for (const listener of this.snapshotListeners) {
+            listener(snapshot);
+          }
         }
       }
       return;
     }
     if (event === 'notification.opened') {
       const data = (payload ?? {}) as NotificationOpenedPayload;
-      for (const listener of this.notificationListeners) {
-        listener(data);
+      if (this.notificationListeners.size === 0) {
+        // 订阅者尚未就绪：入队（一次性事件，按到达顺序保留，不合并）。
+        // 封顶防无界增长（页面长期未订阅时）；超界丢最旧 —— 最新的一次点击才代表用户当下的意图。
+        this.pendingNotificationEvents.push(data);
+        if (this.pendingNotificationEvents.length > MAX_PENDING_NOTIFICATION_EVENTS) {
+          this.pendingNotificationEvents.shift();
+        }
+      } else {
+        for (const listener of this.notificationListeners) {
+          listener(data);
+        }
       }
     }
   }
@@ -233,6 +267,15 @@ export class WebViewBridge implements PlatformBridge {
   onSnapshotChanged(cb: (snapshot: RoutineSnapshot) => void): () => void {
     this.install();
     this.snapshotListeners.add(cb);
+    // 补发订阅前到达的「最新快照」（若存在）。此刻集合内只有刚加入的 cb，
+    // 因此对集合分发等价于对 cb 单发；沿用 for...of 与既有风格一致。
+    if (this.pendingSnapshotEvent !== null) {
+      const snapshot = this.pendingSnapshotEvent;
+      this.pendingSnapshotEvent = null;
+      for (const listener of this.snapshotListeners) {
+        listener(snapshot);
+      }
+    }
     return () => {
       this.snapshotListeners.delete(cb);
     };
@@ -241,6 +284,14 @@ export class WebViewBridge implements PlatformBridge {
   onNotificationOpened(cb: (payload: NotificationOpenedPayload) => void): () => void {
     this.install();
     this.notificationListeners.add(cb);
+    // 补发订阅前到达的通知点击事件，按到达顺序逐条**只调 cb**：
+    // 点击是一次性事件，若广播给集合内所有 listener，会对更早的订阅者造成重复投递；
+    // 此分支下集合内只有新加入的 cb，两种写法可观测结果一致，这里明确只投给本次订阅者。
+    // 投递完毕即清空队列，避免同一条事件被后续订阅者重复消费。
+    for (const payload of this.pendingNotificationEvents) {
+      cb(payload);
+    }
+    this.pendingNotificationEvents = [];
     return () => {
       this.notificationListeners.delete(cb);
     };

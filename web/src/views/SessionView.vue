@@ -29,7 +29,7 @@
         <ActiveFocusCard :now="now" />
         <div class="mm-session-col">
           <PlanImpactCard :now="now" />
-          <TimelineCard :now="now" />
+          <TimelineCard :now="now" :focused-progress-id="focusedProgressID" />
         </div>
       </div>
     </main>
@@ -62,9 +62,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useRoutineStore } from '../stores/routine';
+import { useRemindersStore, type FocusRequest } from '../stores/reminders';
 import ActiveFocusCard from './session/ActiveFocusCard.vue';
 import CompletionResultOverlay from './session/CompletionResultOverlay.vue';
 import PlanImpactCard from './session/PlanImpactCard.vue';
@@ -74,6 +75,7 @@ import { useNow } from './session/useNow';
 
 const store = useRoutineStore();
 const router = useRouter();
+const reminders = useRemindersStore();
 
 /** 每秒刷新（对应各卡片的 TimelineView(.periodic by: 1)）；整个会话页共用一个源。 */
 const now = useNow();
@@ -94,10 +96,54 @@ const completionResult = ref<CompletionResult | null>(null);
 /** 同一次会话只弹一次（对应 Swift `lastPresentedCompletionID`）。 */
 const lastPresentedCompletionID = ref<string | null>(null);
 
+/**
+ * 通知回跳命中高亮：命中的 progress id（4 秒后自动清空）。
+ * 由 SessionView 消费 reminders.focusRequest 后置入，传给 TimelineCard 高亮并滚动。
+ */
+const focusedProgressID = ref<string | null>(null);
+let highlightTimer: ReturnType<typeof setTimeout> | null = null;
+
 onMounted(() => {
   // 会话页动作 core 状态机前先确保初始化完成（web 特有的异步 init 窗口）。
   void store.ensureReady();
+  // App.vue 的 watch 可能已把用户导航过来，但本组件挂载时机晚于那次导航，
+  // 所以要主动取一次当前待消费的回跳请求。
+  consumeFocusRequest(reminders.focusRequest);
 });
+
+onUnmounted(() => {
+  if (highlightTimer !== null) {
+    clearTimeout(highlightTimer);
+    highlightTimer = null;
+  }
+});
+
+/**
+ * 消费通知回跳请求。
+ *
+ * - 里程碑回跳（progressID 为 null）只要求回到会话页，不针对具体某行。
+ * - task 回跳（有 progressID）则高亮对应行，4 秒后自动取消。
+ * - 消费后清空请求（clearFocusRequest 幂等，重复消费无害）。
+ */
+function consumeFocusRequest(request: FocusRequest | null): void {
+  if (!request) return;
+  // 里程碑回跳（progressID 为 null）只要求回到会话页，不针对具体某行。
+  if (request.progressID === null) {
+    reminders.clearFocusRequest();
+    return;
+  }
+  focusedProgressID.value = request.progressID;
+  if (highlightTimer !== null) clearTimeout(highlightTimer);
+  highlightTimer = setTimeout(() => {
+    focusedProgressID.value = null;
+    highlightTimer = null;
+  }, 4000);
+  reminders.clearFocusRequest();
+}
+
+// 会话页已挂载时若又来一条回跳请求（例如用户已在 /session 上点通知），
+// App.vue 的 watch 不会重复导航，这里负责消费并高亮。
+watch(() => reminders.focusRequest, consumeFocusRequest);
 
 // 对应 Swift `.onChange(of: store.session?.state.rawValue)`（123–131）。
 watch(

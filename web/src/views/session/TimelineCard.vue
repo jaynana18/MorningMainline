@@ -20,6 +20,7 @@
       v-for="item in session.progress"
       :key="item.id"
       class="mm-timeline-row"
+      :class="{ 'mm-timeline-row--focused': item.id === focusedProgressId }"
       :style="{ background: rowColor(item), opacity: item.state === 'completed' ? 0.55 : 1 }"
       :data-testid="`timeline-row-${item.id}`"
     >
@@ -117,7 +118,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import {
   estimatedDueDates,
   formatMinutes,
@@ -130,7 +131,7 @@ import { formatClock, reorderableItems } from './helpers';
 import PendingTaskReorderView from './PendingTaskReorderView.vue';
 import SessionIcon from './SessionIcon.vue';
 
-const props = defineProps<{ now: Date }>();
+const props = defineProps<{ now: Date; focusedProgressId?: string | null }>();
 
 const store = useRoutineStore();
 const showsReorder = ref(false);
@@ -145,6 +146,23 @@ const estimates = computed(() =>
 
 /** 可重排待办（> 1 才显示「调整顺序」）。 */
 const reorderable = computed(() => (session.value ? reorderableItems(session.value) : []));
+
+// P3 通知回跳：命中行滚动到可视区中部。
+// 必须带 `document` 守卫：vitest 是 node 环境（无 DOM），且部分环境缺 scrollIntoView。
+watch(
+  () => props.focusedProgressId,
+  (id) => {
+    if (!id) return;
+    if (typeof document === 'undefined') return;
+    void nextTick(() => {
+      const el = document.querySelector(`[data-testid="timeline-row-${id}"]`);
+      if (el && typeof el.scrollIntoView === 'function') {
+        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
+    });
+  },
+  { immediate: true },
+);
 
 function originalDue(item: StepProgress): Date {
   return originalDueAt(item);

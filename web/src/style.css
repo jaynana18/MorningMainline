@@ -708,3 +708,87 @@ body {
   font-size: 22px;
   font-weight: 800;
 }
+
+/* ==========================================================================
+   P3 应用内提醒弹窗（ReminderOverlay）
+   前台横幅已被抑制，前台提醒完全依赖此弹窗。
+   ========================================================================== */
+.mm-reminder-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  max-width: 380px;
+  padding: 24px;
+  text-align: center;
+  border-radius: 28px;
+  background: var(--mm-canvas);
+  box-shadow:
+    inset 0 0 0 3px rgba(29, 31, 29, 0.7),
+    0 10px 20px rgba(29, 31, 29, 0.2);
+}
+
+/* 延误 / 到点：必须一眼辨识。 */
+.mm-reminder-card--overdue {
+  background: var(--mm-red);
+  color: #fff;
+}
+
+.mm-reminder__label {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  opacity: 0.7;
+  text-transform: uppercase;
+}
+
+.mm-reminder__title {
+  margin: 6px 0 8px;
+  font-size: 19px;
+  font-weight: 800;
+}
+
+.mm-reminder__body {
+  margin: 0 0 6px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.mm-reminder__time,
+.mm-reminder__queue {
+  margin: 0;
+  font-size: 12px;
+  color: var(--mm-ink-soft);
+}
+
+.mm-reminder-card--overdue .mm-reminder__time,
+.mm-reminder-card--overdue .mm-reminder__queue {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.mm-reminder-card .mm-btn--primary {
+  margin-top: 10px;
+  min-width: 120px;
+}
+
+/* 通知回跳命中行的高亮脉冲。
+   刻意只动 outline / box-shadow：行的背景色由 JS 的 rowColor(item) 内联控制，
+   改 background 会打架。 */
+@keyframes mm-focus-pulse {
+  0%,
+  100% {
+    outline: 0 solid rgba(251, 105, 28, 0);
+    box-shadow: inset 0 0 0 2px rgba(29, 31, 29, 0.45);
+  }
+  50% {
+    outline: 3px solid var(--mm-orange);
+    box-shadow:
+      inset 0 0 0 2px var(--mm-orange),
+      0 0 0 4px rgba(251, 105, 28, 0.35);
+  }
+}
+
+.mm-timeline-row--focused {
+  animation: mm-focus-pulse 1.2s ease-in-out 3;
+}
