@@ -378,7 +378,7 @@ function capsuleColor(item: StepProgress): string {
   if (item.state === 'active' && overdueSeconds(item) > 0) {
     return { low: '#dfa25c', mid: '#e47872', high: '#b43843' }[urgencyClass(item)] ?? '#b43843';
   }
-  return ['#efa09b', '#658da7', '#95b96d', '#a46b88'][Math.max(0, taskItems.value.findIndex(task => task.id === item.id)) % 4];
+  return ['#548bd4', '#69a28e', '#9a8bbe', '#bb9583'][Math.max(0, taskItems.value.findIndex(task => task.id === item.id)) % 4];
 }
 function overdueSeconds(item: StepProgress): number { return Math.max(0, elapsedSeconds(item) - item.step.duration); }
 function itemHeight(item: StepProgress): number {
@@ -485,21 +485,21 @@ function clearDrag(): void { drag.value = null; }
 </script>
 
 <style scoped>
-.mm-capsule-timeline { display: flex; flex-direction: column; gap: 12px; padding: 14px; border-radius: 24px; background: #fff; }
+.mm-capsule-timeline { display: flex; flex-direction: column; gap: 14px; padding: 20px; border: 1px solid var(--mm-border); border-radius: 24px; background: #fff; box-shadow: var(--mm-shadow); }
 .mm-capsule-timeline::before, .mm-capsule-timeline::after { display: none; }
-.mm-capsule-now { align-self: flex-end; color: var(--mm-ink-soft); font-size: 12px; font-variant-numeric: tabular-nums; }
+.mm-capsule-now { align-self: flex-end; color: #91a0b4; font-size: 11px; font-variant-numeric: tabular-nums; padding: 3px 8px; border-radius: 7px; background: #f5f7fb; }
 .mm-task-band { gap: 12px; }
 .mm-task-lane { position: relative; }
 .mm-task-lane::after { content: ''; position: absolute; left: 25px; top: 100%; height: 12px; width: 3px; background: #eeeded; }
 .mm-task-block { gap: 14px; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
 .mm-task-block.active, .mm-task-block.overdue, .mm-task-block.completed, .mm-task-block.unconfirmed { padding: 0; border: 0; background: transparent; box-shadow: none; opacity: 1; }
 .mm-task-block::before { display: none; }
-.mm-time-capsule { position: relative; align-self: stretch; flex: 0 0 52px; min-height: 44px; border-radius: 999px; overflow: hidden; background: #eeeded; color: var(--capsule-color); }
+.mm-time-capsule { position: relative; align-self: stretch; flex: 0 0 52px; min-height: 44px; border-radius: 999px; overflow: hidden; background: #f0f3f7; color: var(--capsule-color); }
 .mm-time-capsule__fill { position: absolute; inset: 0 0 auto; background: var(--capsule-color); transition: height .9s linear, background-color .5s ease; }
 .mm-time-capsule svg { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); filter: drop-shadow(0 1px 1px #ffffffb3); }
 .active .mm-time-capsule svg, .completed .mm-time-capsule svg, .unconfirmed .mm-time-capsule svg { color: #fff; filter: drop-shadow(0 1px 2px #0003); }
-.mm-capsule-time { margin-bottom: 5px; color: #949494; font-size: 11px; font-variant-numeric: tabular-nums; }
-.mm-task-block__title { font-size: 16px; white-space: normal; line-height: 1.3; }
+.mm-capsule-time { margin-bottom: 5px; color: #97a4b6; font-size: 10px; font-variant-numeric: tabular-nums; }
+.mm-task-block__title { font-size: 14px; font-weight: 650; white-space: normal; line-height: 1.5; }
 .mm-task-block__title small { display: none; }
 .completed .mm-task-block__title { color: #999; }
 .mm-task-check { width: 24px; height: 24px; margin-right: 2px; border: 2px solid var(--capsule-color); color: var(--capsule-color); font-size: 14px; }

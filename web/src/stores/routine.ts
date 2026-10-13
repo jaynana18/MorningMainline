@@ -5,7 +5,7 @@
  * - 内部持有 `core/store.ts` 的 `RoutineStore` 实例；**core 层不做响应式改造**，由 Pinia 包一层。
  * - 每次变更后收口到私有 `commit()`：`snapshot` 重新赋值 → `writeSnapshot()` → `replaceNotifications(session)`。
  *   视图层**不得**各自调用后两者。
- * - `parse()` 走 `core/pipeline.ts`；浏览器宿主经 `bridge.parseWithModel`，无能力时静默回退纯规则并把提示写入 `notice`。
+ * - `parsePlan()` 请求已登录账号的 AI 解析与缓存，失败明确提示，不再静默采用本机规则。
  * - `createTemplate()` 复用 `core/parser.ts` 的 `makeTemplate`，实现 iOS 创建页的截止时间交互语义。
  *
  * 视图层禁止直接 import `core/` 或 `platform/`；本模块是唯一门面，并在此重导出视图需要的小工具。
@@ -16,7 +16,6 @@ import { defineStore } from 'pinia';
 import type {
   ParseResult,
   Recurrence,
-  RoutineParsingService,
   RoutineSession,
   RoutineSnapshot,
   RoutineTemplate,
@@ -31,8 +30,8 @@ import {
   initialSnapshot,
   makeParseResult,
 } from '../core/types';
-import { inferredDeadline, makeSteps, makeTemplate } from '../core/parser';
-import { RoutineParsingPipeline } from '../core/pipeline';
+import { makeTemplate } from '../core/parser';
+import { parseTaskPlan } from '../platform/taskParsing';
 import { isIncomplete } from '../core/session';
 import { RoutineStore } from '../core/store';
 import type { PlatformBridge } from '../platform/bridge';
@@ -252,45 +251,20 @@ export const useRoutineStore = defineStore('routine', () => {
   }
 
   async function parse(input: string): Promise<ParseResult> {
+    const plan = await parsePlan(input);
+    const result = makeParseResult({ steps: [...plan.preparation, ...plan.stops.flatMap(stop => stop.steps)], deadline: plan.deadline, source: 'enhanced', leftover: '' });
+    lastParse.value = result.hasSteps ? result : null;
+    return result;
+  }
+
+  async function parsePlan(input: string) {
     parsing.value = true;
     notice.value = null;
     try {
-      const pipeline = new RoutineParsingPipeline({ tz });
-      const modelAvailable = bridge.capabilities.modelParsing;
-      let modelAttempted = false;
-      if (modelAvailable) {
-        const enhanced: RoutineParsingService = {
-          source: 'enhanced',
-          parse: (text) => {
-            modelAttempted = true;
-            return bridge.parseWithModel(text);
-          },
-        };
-        pipeline.setEnhanced(enhanced);
-      }
-
-      const raw = await pipeline.parse(input, new Date());
-      if (!raw) {
-        lastParse.value = null;
-        return makeParseResult({ steps: [], deadline: null, source: 'rule', leftover: input.trim() });
-      }
-
-      // 模型/规则没给出截止时间时，回落到本机 inferredDeadline（对齐 iOS `generate()`）。
-      const deadline = raw.deadline ?? inferredDeadline(input, new Date(), tz);
-      const enriched = makeParseResult({
-        steps: raw.steps,
-        deadline,
-        source: raw.source,
-        leftover: raw.leftover,
-      });
-      lastParse.value = enriched.hasSteps ? enriched : null;
-
-      if (!modelAvailable) {
-        notice.value = '当前环境未接入智能解析，已使用本机规则识别。';
-      } else if (modelAttempted && raw.source === 'rule') {
-        notice.value = '智能解析未返回更完整的结果，已回退本机规则识别。';
-      }
-      return enriched;
+      return await parseTaskPlan(input);
+    } catch (error) {
+      lastParse.value = null;
+      throw error;
     } finally {
       parsing.value = false;
     }
@@ -303,10 +277,11 @@ export const useRoutineStore = defineStore('routine', () => {
    *
    * 已解析步骤优先取 `lastParse`（对齐 iOS `rebuild()` 的「改截止/重复不清空步骤」语义）。
    */
-  function createTemplate(input: string, opts: CreateTemplateOptions): RoutineTemplate {
+  function createTemplate(_input: string, opts: CreateTemplateOptions): RoutineTemplate {
     const now = new Date();
     const cached = lastParse.value;
-    const steps = opts.steps ?? (cached && cached.hasSteps ? cached.steps : makeSteps(input));
+    const steps = opts.steps ?? (cached && cached.hasSteps ? cached.steps : null);
+    if (!steps) throw new Error('请先完成 AI 识别，再生成任务线。');
     const template = makeTemplate(steps, opts.deadline, opts.recurrence, now, tz);
     if (!template) {
       throw new Error('无法生成任务线：没有可识别的任务步骤。');
@@ -419,6 +394,7 @@ export const useRoutineStore = defineStore('routine', () => {
     ensureReady,
     dispose,
     parse,
+    parsePlan,
     createTemplate,
     addTemplate,
     replaceTemplate,

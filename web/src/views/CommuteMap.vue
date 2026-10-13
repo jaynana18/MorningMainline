@@ -1,6 +1,6 @@
 <template>
   <div class="commute-map" :class="{ 'commute-map--compact': compact }" @click.stop>
-    <MapPreview :src="mapURL" :title="`到${route.address}的路线`" :navigation-url="commuteNavigationURL(route)" />
+    <MapPreview :src="mapURL" :title="`到${route.address}的路线`" :navigation-url="commuteNavigationURL(route)" :commute-seconds="route.seconds" :travel-mode-label="modeLabel" />
     <span class="commute-map__caption">{{ modeLabel }} · 约 {{ Math.ceil(route.seconds / 60) }} 分钟</span>
     <span v-if="!route.polyline" class="commute-map__note">仅显示起终点，完整路线请在高德查看</span>
   </div>

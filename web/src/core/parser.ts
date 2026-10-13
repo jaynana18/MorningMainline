@@ -80,7 +80,11 @@ function stripEdges(text: string, punctuation: string): string {
  *   3. 中文标点 `；，,。、` → `|`。
  */
 export function normalizedSource(input: string): string {
-  const normalizedDurations = replacingChineseDurationNumerals(input);
+  // 先把同一项的复合时长合并；任务解析和 leftover 必须使用同一份结果。
+  const normalizedDurations = replacingChineseDurationNumerals(input).replace(
+    /(\d+(?:\.\d+)?)\s*(?:个)?(?:小时|[hH])\s*(?:又|零|和)?\s*(\d+(?:\.\d+)?)\s*(?:分钟|分)/g,
+    (_, hours: string, minutes: string) => `${Number(hours) * 60 + Number(minutes)}分钟`,
+  );
   const replacedDeadline = replacing(
     '(?:截止时间|截止|完成时间|到期时间)?\\s*\\d{1,2}\\s*(?:点|:|：)\\s*\\d{0,2}\\s*分?',
     normalizedDurations,

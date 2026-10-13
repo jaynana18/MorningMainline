@@ -8,13 +8,17 @@
       <span class="mm-toolbar__side">
         <button class="mm-btn mm-btn--secondary" @click="goBack">任务线</button>
       </span>
-      <span class="mm-title">{{ activeTemplate.name }}</span>
+      <span class="mm-title">计划预览</span>
       <span class="mm-toolbar__side mm-toolbar__side--end">
         <button class="mm-btn mm-btn--secondary" @click="router.push('/create?edit=1')">一句话修改</button>
       </span>
     </header>
 
     <main class="mm-page" style="max-width: 1120px">
+      <div class="mm-page-heading">
+        <h2>{{ activeTemplate.name }}</h2>
+        <p class="mm-hint">{{ taskSteps(activeTemplate).length }} 个任务 · {{ activeTemplate.mode === 'backward' ? '先确认终点，再倒推开始时间' : '按自己的节奏，开始第一步' }}</p>
+      </div>
       <!-- backward：本次计划 / 原计划两栏 -->
       <template v-if="activeTemplate.mode === 'backward'">
         <div

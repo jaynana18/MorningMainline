@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div class="create-view">
     <header class="mm-toolbar">
       <button class="mm-btn mm-btn--secondary" @click="onCancel">取消</button>
       <span class="mm-title">{{ editingID ? '一句话修改' : '一句话创建' }}</span>
@@ -11,15 +11,16 @@
     <main class="mm-page" style="max-width: 720px">
       <!-- ① 输入区 -->
       <section class="mm-section">
-        <div class="mm-hint" style="font-weight: 700; margin-bottom: 8px">写下要做的事</div>
+        <div class="mm-section-heading"><h3>把计划说出来</h3><span class="mm-eyebrow">一句话就够</span></div>
         <textarea
           v-model="input"
           class="mm-textarea"
           data-testid="create-input"
+          placeholder="刷牙3分钟，去凯德逛30分钟，再去宜家待1小时，18点结束。"
         ></textarea>
         <!-- 示例文案：与 iOS 版一致，只在编辑器下方出现一次（原版 TextEditor 无 placeholder）。 -->
         <p class="mm-hint" style="margin-top: 8px">
-          例：刷牙3分钟，去凯德逛30分钟，再去宜家待1小时，18点结束。
+          写下步骤、时长和目的地，会自动拆成你的任务线。
         </p>
         <p style="color: var(--mm-orange); font-size: 12px; display: flex; align-items: center; gap: 4px">
           <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -83,7 +84,7 @@
 
       <!-- ② 计划设置（仅「重复」选择） -->
       <section class="mm-section">
-        <div class="mm-hint" style="font-weight: 700; margin-bottom: 8px">计划设置</div>
+        <div class="mm-section-heading"><h3>计划设置</h3></div>
         <div class="mm-row">
           <span>重复</span>
           <span class="mm-seg">
@@ -101,7 +102,7 @@
       </section>
 
       <!-- ③ 生成按钮 -->
-      <section class="mm-section">
+      <section class="mm-section mm-form-actions">
         <button
           class="mm-btn mm-btn--primary"
           style="width: 100%"
@@ -117,7 +118,7 @@
       <!-- ④ 生成后才出现的截止时间区（④ 与 ⑤ 均在 generated 非空时渲染） -->
       <template v-if="generated !== null">
         <section class="mm-section" data-testid="deadline-section">
-          <div class="mm-hint" style="font-weight: 700; margin-bottom: 8px">截止时间</div>
+          <div class="mm-section-heading"><h3>钉住终点</h3><SessionIcon name="flag" :size="16" /></div>
           <label class="mm-toggle">
             <input v-model="hasDeadline" type="checkbox" data-testid="deadline-toggle" />
             <span>设置截止时间</span>
@@ -132,7 +133,8 @@
 
         <!-- ⑤ 预览区（不重复展示截止时间行） -->
         <section class="mm-section" data-testid="preview-section">
-          <div class="mm-hint" style="font-weight: 700; margin-bottom: 8px">预览</div>
+          <div class="mm-section-heading"><h3>你的任务线</h3><span class="mm-hint">{{ generated.steps.length }} 个步骤</span></div>
+          <p v-if="parsingCaption" class="mm-hint">{{ parsingCaption }}</p>
           <div class="mm-preview-item">
             <span class="mm-inline">
               <SessionIcon :name="iconNameForSymbol(generated.symbol)" :size="14" />
@@ -148,14 +150,13 @@
             <span class="mm-hint">{{ modeTitle }}</span>
           </div>
           <div v-for="step in generated.steps" :key="step.id" class="mm-preview-item">
-            <span>{{ step.title }}</span>
+            <div class="create-preview-task">
+              <span>{{ step.title }}</span>
+              <CommuteMap v-if="step.commute" :route="step.commute" compact />
+            </div>
             <span class="mm-hint">
               {{ step.role === 'deadline' ? '硬节点' : formatMinutes(step.duration) }}
             </span>
-          </div>
-          <div v-for="item in commuteItems" :key="item.step.id" style="margin-top: 10px">
-            <p class="mm-hint">{{ item.step.title }}</p>
-            <CommuteMap :route="item.route" />
           </div>
           <template v-if="hasCommute && route && hasDeadline">
             <label>固定缓冲（分钟）<input v-model.number="bufferMinutes" class="mm-input" type="number" min="0" max="120" /></label>
@@ -191,9 +192,6 @@ import {
 import { DestinationSelectionRequired, OriginRequired, destinationMapURL, type CommuteDestination } from '../platform/commute';
 import CommuteMap from './CommuteMap.vue';
 import MapPreview from './MapPreview.vue';
-import { splitItinerary, type ItineraryStop } from '../core/itinerary';
-import { inferredDeadline } from '../core/parser';
-import { defaultTimeZone } from '../core/serialization';
 import { iconNameForSymbol } from './session/helpers';
 import SessionIcon from './session/SessionIcon.vue';
 
@@ -228,6 +226,7 @@ const bufferMinutes = ref(10);
 const commuteItems = ref<{ step: RoutineStep; route: CommuteRoute }[]>([]);
 const destinationDialog = ref(false);
 const routeError = ref('');
+const parsingCaption = ref('');
 const selectedPlace = ref<CommuteDestination | null>(null);
 const needsOrigin = ref(false);
 const originQuery = ref('');
@@ -258,7 +257,7 @@ function chooseOrigin(place: CommuteDestination): void {
 }
 let routeRequest = 0;
 let generation = 0;
-const pendingStops = ref<ItineraryStop[]>([]);
+const pendingStops = ref<{ query: string; steps: RoutineStep[] }[]>([]);
 const stopIndex = ref(0);
 function openDestination(): void {
   selectedPlace.value = null;
@@ -302,8 +301,7 @@ async function lookupRoute(selectedDestination?: CommuteDestination): Promise<vo
     const previous = commuteItems.value[commuteItems.value.length - 1]?.route;
     const result = await queryCommute(amapKey.value, requestedDestination, requestedMode, selectedDestination, previous?.location || manualOrigin.value || undefined);
     if (requestID !== routeRequest || destination.value !== requestedDestination || travelMode.value !== requestedMode || !hasCommute.value) return;
-    const activities = pendingStops.value[stopIndex.value].activities;
-    const tasks = activities.trim() ? (await store.parse(activities)).steps : [];
+    const tasks = pendingStops.value[stopIndex.value].steps;
     if (requestID !== routeRequest || !destinationDialog.value) return;
     route.value = result;
     const step = createStep({ title: `通勤到${result.address}`, duration: result.seconds, commute: result });
@@ -382,22 +380,16 @@ async function generate(): Promise<void> {
   generated.value = null;
   commuteItems.value = [];
   route.value = null;
+  parsingCaption.value = '';
   try {
-    const itinerary = splitItinerary(input.value);
-    pendingStops.value = itinerary.stops;
-    stopIndex.value = 0;
-    hasCommute.value = itinerary.stops.length > 0;
-    const taskText = hasCommute.value ? itinerary.preparation.replace(/(?:然后|接着|之后|再|最后|先)\s*$/, '').trim() : input.value;
-    const result = taskText ? await store.parse(taskText) : { steps: [], hasSteps: false, deadline: null };
+    const result = await store.parsePlan(input.value);
     if (currentGeneration !== generation) return;
-    if (!result.hasSteps && !hasCommute.value) {
-      parsedSteps.value = [];
-      generated.value = null;
-      return;
-    }
-    // 模型/规则没给出截止时间时，store.parse 已用 inferredDeadline 回落。
-    const resolved = inferredDeadline(input.value, new Date(), defaultTimeZone()) ?? result.deadline;
-    parsedSteps.value = result.steps;
+    pendingStops.value = result.stops;
+    stopIndex.value = 0;
+    hasCommute.value = result.stops.length > 0;
+    const resolved = result.deadline;
+    parsedSteps.value = result.preparation;
+    parsingCaption.value = result.cached ? '已复用这句话的识别结果，请确认任务与时长。' : 'AI 已识别，请确认任务与时长。';
     hasDeadline.value = resolved !== null;
     if (resolved) {
       selectedDeadline.value = resolved;
@@ -440,7 +432,7 @@ function rebuild(): void {
       generated.value.buffer = Math.max(0, Number(bufferMinutes.value) || 0) * 60;
       generated.value.name = `去${route.value?.address ?? destination.value}`;
       const deadline = generated.value.steps.find((step) => step.role === 'deadline');
-      if (deadline) deadline.title = pendingStops.value[pendingStops.value.length - 1]?.activities
+      if (deadline) deadline.title = pendingStops.value[pendingStops.value.length - 1]?.steps.length
         ? '结束' : `到达${route.value?.address ?? destination.value}`;
     }
   } catch {
@@ -497,3 +489,10 @@ function onCancel(): void {
   void router.push('/');
 }
 </script>
+
+<style scoped>
+.create-preview-task { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
+.create-preview-task > span { min-width: 0; overflow-wrap: anywhere; }
+.create-preview-task :deep(.commute-map--compact) { width: 56px; flex-basis: 56px; flex-shrink: 0; }
+.mm-preview-item > .mm-hint { white-space: nowrap; flex-shrink: 0; }
+</style>

@@ -8,6 +8,7 @@
     <div v-if="expanded" class="mm-modal-backdrop map-preview-backdrop" @click.stop.self="expanded = false" @keydown.esc.stop="expanded = false">
       <section class="mm-modal map-preview-dialog" role="dialog" aria-modal="true" :aria-label="title" @click.stop>
         <div class="mm-row"><b>{{ title }}</b><button ref="closeButton" type="button" class="mm-btn mm-btn--secondary" @click="expanded = false">关闭</button></div>
+        <p v-if="commuteSeconds != null" class="map-preview-duration">{{ travelModeLabel }} · 预计通勤 <b>{{ Math.ceil(commuteSeconds / 60) }} 分钟</b></p>
         <img v-if="src && !failed" class="map-preview-image" :src="src" :alt="title" referrerpolicy="no-referrer" @error="failed = true" />
         <p v-else class="mm-hint">地图暂时无法加载，请稍后再试。</p>
         <a v-if="navigationUrl" :href="navigationUrl" class="mm-btn mm-btn--secondary">在高德打开路线 ↗</a>
@@ -18,7 +19,7 @@
 
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue';
-const props = defineProps<{ src: string; title: string; navigationUrl?: string }>();
+const props = defineProps<{ src: string; title: string; navigationUrl?: string; commuteSeconds?: number; travelModeLabel?: string }>();
 const expanded = ref(false);
 const failed = ref(false);
 const closeButton = ref<HTMLButtonElement | null>(null);
@@ -41,4 +42,6 @@ watch(expanded, async value => {
 .map-preview-backdrop { z-index: 2000; }
 .map-preview-dialog { width: min(92vw, 720px); max-height: 90vh; overflow-y: auto; }
 .map-preview-image { display: block; width: 100%; aspect-ratio: 2; object-fit: contain; margin: 14px 0; border-radius: 12px; background: #eef2e9; }
+.map-preview-duration { margin: 8px 0; padding: 10px 12px; border-radius: 10px; background: var(--mm-primary-soft); color: #6d85a5; font-size: 13px; }
+.map-preview-duration b { color: var(--mm-primary); font-weight: 650; }
 </style>

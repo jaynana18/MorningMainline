@@ -1,5 +1,5 @@
 <template>
-  <div class="app-shell" :class="{ 'app-shell--navigation': account.user }">
+  <div class="app-shell app-shell--navigation">
     <p v-if="!account.ready" class="mm-hint" style="padding: 24px">正在连接账号…</p>
     <AccountView v-else-if="!account.user" />
     <template v-else>
@@ -9,15 +9,6 @@
         <button class="mm-btn mm-btn--secondary" @click="resolveConflict('local')">用本机数据替换服务器</button>
       </div>
       <router-view />
-      <nav class="app-bottom-bar" aria-label="底部导航">
-        <button class="app-bottom-tab" :class="{ active: route.name !== 'profile' }" :aria-current="route.name !== 'profile' ? 'page' : undefined" @click="router.push('/')">
-          <SessionIcon name="clock" :size="25" /><span>任务</span>
-        </button>
-        <button class="app-create-button" aria-label="一句话创建" @click="router.push('/create')"><SessionIcon name="plus" :size="34" /></button>
-        <button class="app-bottom-tab" :class="{ active: route.name === 'profile' }" :aria-current="route.name === 'profile' ? 'page' : undefined" @click="router.push('/profile')">
-          <SessionIcon name="person" :size="25" /><span>个人中心</span>
-        </button>
-      </nav>
       <router-view name="drawer" v-slot="{ Component }">
         <Teleport to="body">
           <Transition name="create-drawer">
@@ -31,6 +22,18 @@
         </Teleport>
       </router-view>
     </template>
+
+    <Teleport to="body">
+      <nav class="app-bottom-bar" aria-label="底部导航">
+        <button class="app-bottom-tab" :class="{ active: route.name !== 'profile' }" :aria-current="route.name !== 'profile' ? 'page' : undefined" @click="router.push('/')">
+          <SessionIcon name="clock" :size="25" /><span>任务</span>
+        </button>
+        <button class="app-create-button" aria-label="一句话创建" @click="router.push('/create')"><SessionIcon name="plus" :size="34" /></button>
+        <button class="app-bottom-tab" :class="{ active: route.name === 'profile' }" :aria-current="route.name === 'profile' ? 'page' : undefined" @click="router.push('/profile')">
+          <SessionIcon name="person" :size="25" /><span>个人中心</span>
+        </button>
+      </nav>
+    </Teleport>
 
     <!--
       P3 应用内提醒弹窗（前台唯一提醒通道）。
@@ -115,13 +118,15 @@ watch(
 
 <style>
 .app-shell--navigation { padding-bottom: calc(98px + env(safe-area-inset-bottom)); }
-.app-bottom-bar { position: fixed; z-index: 30; bottom: 0; left: 0; right: 0; display: grid; grid-template-columns: 1fr 100px 1fr; align-items: center; min-height: 72px; padding: 8px 16px calc(8px + env(safe-area-inset-bottom)); background: #fffffff5; border-top: 1px solid #f0f1f4; backdrop-filter: blur(16px); }
+.app-bottom-bar { position: fixed; z-index: 30; bottom: 0; left: 50%; transform: translateX(-50%); width: min(100%, 800px); display: grid; grid-template-columns: 1fr 100px 1fr; align-items: center; min-height: 72px; padding: 8px 16px calc(8px + env(safe-area-inset-bottom)); background: #fffffff5; border: 1px solid var(--mm-border); border-bottom: 0; border-radius: 22px 22px 0 0; box-shadow: 0 -4px 28px #24334b05; backdrop-filter: blur(16px); }
 .app-bottom-tab { display: flex; align-items: center; flex-direction: column; gap: 5px; border: 0; background: none; color: #aaa; cursor: pointer; font-size: 11px; }
-.app-bottom-tab.active { color: #409df2; }
-.app-create-button { justify-self: center; display: grid; place-items: center; width: 68px; height: 68px; margin-top: -36px; border: 0; border-radius: 23px; background: #409df2; color: #fff; box-shadow: 0 8px 24px #409df23d; cursor: pointer; }
+.app-bottom-tab.active { color: var(--mm-primary); }
+.app-bottom-tab svg { padding: 5px; width: 34px; height: 34px; border-radius: 11px; }
+.app-bottom-tab.active svg { background: var(--mm-primary-soft); }
+.app-create-button { justify-self: center; display: grid; place-items: center; width: 62px; height: 62px; margin-top: -32px; border: 4px solid var(--mm-canvas); border-radius: 22px; background: var(--mm-primary); color: #fff; box-shadow: 0 8px 24px #4189eb26; cursor: pointer; }
 .app-shell--navigation .mm-current-dock { bottom: calc(92px + env(safe-area-inset-bottom)); }
 .app-shell--navigation .mm-taskline-screen { padding-bottom: 90px; }
-.create-drawer-backdrop { position: fixed; inset: 0; z-index: 50; display: flex; align-items: flex-end; justify-content: center; background: #17222d66; }
+.create-drawer-backdrop { position: fixed; inset: 0; z-index: 50; display: flex; align-items: flex-end; justify-content: center; background: #24334b4d; backdrop-filter: blur(5px); }
 .create-drawer-panel { width: 100%; max-width: 800px; max-height: 92dvh; overflow-y: auto; overscroll-behavior: contain; border-radius: 26px 26px 0 0; background: var(--mm-canvas); padding-bottom: env(safe-area-inset-bottom); }
 .create-drawer-handle { width: 44px; height: 5px; margin: 10px auto 5px; border-radius: 8px; background: #bfc4c9; }
 .create-drawer-panel .mm-toolbar { border-bottom-width: 1px; }

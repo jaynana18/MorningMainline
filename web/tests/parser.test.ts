@@ -6,6 +6,7 @@ import {
   makeSteps,
 } from '../src/core/parser';
 import { anchorNoon, formatHM, localDate, TZ } from './helpers';
+import { splitItinerary } from '../src/core/itinerary';
 
 function assertDeadline(input: string, expected: string | null): void {
   const deadline = inferredDeadline(input, anchorNoon(), TZ);
@@ -18,6 +19,23 @@ function assertDeadline(input: string, expected: string | null): void {
 }
 
 describe('parser — 规则解析（M10/M12，用例 4/10/11/12/13/14）', () => {
+  it('小时加分钟作为同一项时长，不丢分钟、不拆成第二项', () => {
+    for (const input of ['逛1小时20分钟', '逛一小时二十分钟', '逛1小时 20分钟', '逛1小时20分']) {
+      const result = analyze(input, anchorNoon(), TZ);
+      expect(result.steps.map(step => [step.title, step.duration])).toEqual([['逛', 80 * 60]]);
+      expect(result.leftover).toBe('');
+    }
+    expect(makeSteps('逛1小时，洗脸20分钟').map(step => step.duration)).toEqual([3600, 1200]);
+  });
+
+  it('实际双地点原句：凯德80分钟，宜家60分钟，各自停留时长不串位', () => {
+    const input = '刷牙3分钟，化妆10分钟，弄头发10分钟，找衣服10分钟，去凯德逛1小时20分钟，再去宜家待1小时，18点结束';
+    const itinerary = splitItinerary(input);
+    expect(itinerary.stops.map(stop => stop.query)).toEqual(['凯德', '宜家']);
+    expect(makeSteps(itinerary.preparation).map(step => step.duration)).toEqual([180, 600, 600, 600]);
+    expect(itinerary.stops.map(stop => makeSteps(stop.activities).map(step => step.duration))).toEqual([[4800], [3600]]);
+    assertDeadline(input, '18:00');
+  });
   it('用例 4：只产出任务步骤，截止表达式被剥离', () => {
     const steps = makeSteps('博兴任务20分钟  去厕所5分钟 App安装5分钟 截止时间18点10分');
     expect(steps.map((step) => step.title)).toEqual(['博兴任务', '去厕所', 'App安装']);
