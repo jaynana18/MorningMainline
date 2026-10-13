@@ -24,6 +24,7 @@ import type {
   NotificationOpenedPayload,
   NotificationPayload,
   PlatformBridge,
+  SharedSettings,
 } from './bridge';
 
 /** 桥调用超时（毫秒）。§4b.1 建议 5s。定义在此避免与 bridge.ts 形成值级循环依赖。 */
@@ -257,6 +258,41 @@ export class WebViewBridge implements PlatformBridge {
     } catch (error) {
       this.warn('snapshot.write', error);
       await this.fallback.writeSnapshot(snapshot);
+    }
+  }
+
+  /**
+   * 读取跨设备设置。原生经 App Group 落地，并由 WCSession 与手表互通。
+   *
+   * 失败时**回落到本地存储**而不是空值：原生桥短暂不可用不该让用户刚填的 Key 消失。
+   */
+  async readSettings(): Promise<SharedSettings> {
+    try {
+      const result = (await this.call('settings.read')) as Record<string, unknown> | null;
+      if (result && typeof result === 'object') {
+        return {
+          amapKey: typeof result.amapKey === 'string' ? result.amapKey : '',
+          travelMode: typeof result.travelMode === 'string' ? result.travelMode : 'driving',
+        };
+      }
+      throw new Error('settings.read 结果非法');
+    } catch (error) {
+      this.warn('settings.read', error);
+      return this.fallback.readSettings();
+    }
+  }
+
+  /**
+   * 写入并广播给配对设备。**这一步是手表拿到高德 Key 的唯一路径** ——
+   * 写 localStorage 手表读不到（跨设备、跨容器）。
+   */
+  async writeSettings(settings: SharedSettings): Promise<void> {
+    try {
+      await this.call('settings.write', { ...settings });
+    } catch (error) {
+      this.warn('settings.write', error);
+      // 原生不可达时至少让本页记住，不至于当次输入白填。
+      await this.fallback.writeSettings(settings);
     }
   }
 

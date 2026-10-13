@@ -16,7 +16,9 @@ import type {
   DeviceInfo,
   NotificationPayload,
   PlatformBridge,
+  SharedSettings,
 } from './bridge';
+import { EMPTY_SHARED_SETTINGS } from './bridge';
 import { isPageForeground } from './foreground';
 import { createRemoteParsingConfiguration, RemoteRoutineParsingService } from '../core/remote';
 
@@ -33,6 +35,8 @@ const STORE_NAME = 'kv';
 const DEVICE_ID_KEY = 'morning-mainline.device-id';
 const SNAPSHOT_KEY = 'morning-mainline.local-snapshot.v2';
 const NOTIFICATION_SESSION_KEY = 'morning-mainline.notifications.session-id';
+/** 跨设备设置的本地存放键。WebView 宿主下这份值会经原生同步到手表。 */
+const SETTINGS_KEY = 'morning-mainline.settings.v1';
 
 /**
  * `Notification.requestPermission()` 的兜底超时。
@@ -175,6 +179,34 @@ export class BrowserBridge implements PlatformBridge {
 
   async writeSnapshot(snapshot: RoutineSnapshot): Promise<void> {
     await this.store.set(SNAPSHOT_KEY, encodeSnapshot(snapshot));
+  }
+
+  /**
+   * 浏览器宿主的设置读写。
+   *
+   * 与 WebView 宿主的**语义差异必须说清**：浏览器里没有 Apple Watch 可同步，
+   * 也没有 App Group 可落 —— 这里的 Key 只存在本页存储里，仅本页有效。
+   * 换句话说，浏览器宿主下「手机上填一次、手表就能用」这件事**物理上做不到**，
+   * 因此这里不做任何假装：读得到就读，读不到就空。
+   */
+  async readSettings(): Promise<SharedSettings> {
+    const raw = await this.store.get(SETTINGS_KEY);
+    if (typeof raw !== 'string' || raw === '') {
+      return { ...EMPTY_SHARED_SETTINGS };
+    }
+    try {
+      const parsed = JSON.parse(raw) as Partial<SharedSettings>;
+      return {
+        amapKey: typeof parsed.amapKey === 'string' ? parsed.amapKey : '',
+        travelMode: typeof parsed.travelMode === 'string' ? parsed.travelMode : 'driving',
+      };
+    } catch {
+      return { ...EMPTY_SHARED_SETTINGS };
+    }
+  }
+
+  async writeSettings(settings: SharedSettings): Promise<void> {
+    await this.store.set(SETTINGS_KEY, JSON.stringify(settings));
   }
 
   async requestNotificationAuthorization(): Promise<boolean> {

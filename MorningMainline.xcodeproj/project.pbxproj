@@ -19,23 +19,32 @@
 		23D02F2F13EE3D36DF640D64 /* RoutineModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB83A579D5478BDF9908C694 /* RoutineModelsTests.swift */; };
 		359B5158C8E3F1873C183CCD /* MainlineWidgetShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2A9EB9B94D439A095BD5A37 /* MainlineWidgetShared.swift */; };
 		36734146BBDE916025F56395 /* WebHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA65DCE4157E78B70E8C21F0 /* WebHost.swift */; };
+		37913E48DF5BD238CCFE643C /* CommuteService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32C5E1D1AF91D477C840CE73 /* CommuteService.swift */; };
 		3A1B35D481F6FF99212FD8E7 /* ConnectivityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98F7FA90F91D78AA6647D544 /* ConnectivityService.swift */; };
 		4021999995DF1EBEE9CD0EB8 /* MainlineWidgetShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2A9EB9B94D439A095BD5A37 /* MainlineWidgetShared.swift */; };
+		4C42688B3988D71CAB399BED /* SharedSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5707B08272527BAF8921D49 /* SharedSettingsStore.swift */; };
 		4C9A220D04177D68402749CF /* RoutineStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 685366F1FF3CFF057A7CB78A /* RoutineStore.swift */; };
 		573ABD70DABF60A88B296D35 /* MainlineWatchWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86208CD1A566ECA2411EAA66 /* MainlineWatchWidget.swift */; };
 		7E4F6E767A19806170D08D30 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17C822EEDDCBF74CAF04F044 /* ContentView.swift */; };
 		849828E257647E9E72DB3084 /* MainlineWidgetShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2A9EB9B94D439A095BD5A37 /* MainlineWidgetShared.swift */; };
 		88E9AEBE621A66433EF4B269 /* CloudSnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E9A2635C55F0B2920F75C7D /* CloudSnapshotStore.swift */; };
+		91776E2E4A4BDC3EDCE046BC /* DestinationGrouping.swift in Sources */ = {isa = PBXBuildFile; fileRef = E511F6D7FD0B7770B311D983 /* DestinationGrouping.swift */; };
 		9848318F958CFED41C72A82D /* AppGroupSharedStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3C20D7AE446D7FB406098E9 /* AppGroupSharedStore.swift */; };
+		A3132C33DD521BC8A18A6305 /* WatchQuickCreateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F9B8E08BC6E6493F7A749A9 /* WatchQuickCreateView.swift */; };
 		A37F93138C8577441BC04C7B /* RoutineModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41EC34B26EFB0073715C59B2 /* RoutineModels.swift */; };
+		A601B3BC918D3FBB8D741B18 /* CommuteService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32C5E1D1AF91D477C840CE73 /* CommuteService.swift */; };
 		A95E300B57AAFFAF9B1F993E /* RoutineModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41EC34B26EFB0073715C59B2 /* RoutineModels.swift */; };
 		AD73D002B1423B5E0AAA7862 /* WatchRoutineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 115B2276EC22382FDECAA411 /* WatchRoutineView.swift */; };
 		ADCD92279056D14DEC4E50D3 /* MainlineWidgetShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2A9EB9B94D439A095BD5A37 /* MainlineWidgetShared.swift */; };
+		B312325A165AC961FD657E6C /* ItinerarySplitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78E091D2AC33C30063D5EF5E /* ItinerarySplitter.swift */; };
 		B5DEDCC05CAEDED41BB61BC4 /* deadline-overdue.aiff in Resources */ = {isa = PBXBuildFile; fileRef = 6F33D018B01AF8A6882A36BE /* deadline-overdue.aiff */; };
 		BB07DA6BF92F57DAD2DD81FD /* ReminderScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5B493C8FC40180E22A0A3D7 /* ReminderScheduler.swift */; };
 		BD641CB91681070536D7C8A1 /* RemoteRoutineParsingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79C9D45333DF4368CADE33B3 /* RemoteRoutineParsingService.swift */; };
+		BF3A68A9B0357BE913B151EE /* SharedSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5707B08272527BAF8921D49 /* SharedSettingsStore.swift */; };
+		C6579D064152D791A533459A /* LocationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFE8193478F3F0011D3EBF3C /* LocationProvider.swift */; };
 		C6E4FD26E7A71AD5CA1FAA02 /* MainlineWatchWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DCC2AAA63190629F93C3BB9 /* MainlineWatchWidgetBundle.swift */; };
 		CA3C25B6C7EECD4C3242532D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C9CE0CC7FA428822CAEAE919 /* Assets.xcassets */; };
+		CBB494D92CE0709E1857424B /* LocationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFE8193478F3F0011D3EBF3C /* LocationProvider.swift */; };
 		D239D8636B4E20D9D4069501 /* RoutineParsingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6AB6CC70F649647AE9589AF3 /* RoutineParsingService.swift */; };
 		D30B3DB38FC973BA862792EA /* MorningMainlineApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81252AB16B5C74E922A67BF0 /* MorningMainlineApp.swift */; };
 		D74EA92D7414624CBDA15284 /* ReminderScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5B493C8FC40180E22A0A3D7 /* ReminderScheduler.swift */; };
@@ -121,14 +130,17 @@
 		1BE3660A6C2977829E630D6B /* dist */ = {isa = PBXFileReference; lastKnownFileType = folder; name = dist; path = web/dist; sourceTree = SOURCE_ROOT; };
 		1E9A2635C55F0B2920F75C7D /* CloudSnapshotStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudSnapshotStore.swift; sourceTree = "<group>"; };
 		2EADDB0F82D86A45C17C6368 /* MainlineWatchWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MainlineWatchWidget.entitlements; sourceTree = "<group>"; };
+		32C5E1D1AF91D477C840CE73 /* CommuteService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommuteService.swift; sourceTree = "<group>"; };
 		41EC34B26EFB0073715C59B2 /* RoutineModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutineModels.swift; sourceTree = "<group>"; };
 		49EDB37922F39B60FA796723 /* MainlineiOSWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MainlineiOSWidget.entitlements; sourceTree = "<group>"; };
 		4DCC2AAA63190629F93C3BB9 /* MainlineWatchWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainlineWatchWidgetBundle.swift; sourceTree = "<group>"; };
+		4F9B8E08BC6E6493F7A749A9 /* WatchQuickCreateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchQuickCreateView.swift; sourceTree = "<group>"; };
 		67AE0FA82E0007703E673C6C /* MainlineiOSWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainlineiOSWidgetBundle.swift; sourceTree = "<group>"; };
 		685366F1FF3CFF057A7CB78A /* RoutineStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutineStore.swift; sourceTree = "<group>"; };
 		6AB6CC70F649647AE9589AF3 /* RoutineParsingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutineParsingService.swift; sourceTree = "<group>"; };
 		6F33D018B01AF8A6882A36BE /* deadline-overdue.aiff */ = {isa = PBXFileReference; lastKnownFileType = audio.aiff; path = "deadline-overdue.aiff"; sourceTree = "<group>"; };
-		6F9961BEA5AB0C40814660E8 /* MorningMainline.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MorningMainline.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		6F9961BEA5AB0C40814660E8 /* MorningMainline.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = MorningMainline.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		78E091D2AC33C30063D5EF5E /* ItinerarySplitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItinerarySplitter.swift; sourceTree = "<group>"; };
 		79C9D45333DF4368CADE33B3 /* RemoteRoutineParsingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteRoutineParsingService.swift; sourceTree = "<group>"; };
 		81252AB16B5C74E922A67BF0 /* MorningMainlineApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MorningMainlineApp.swift; sourceTree = "<group>"; };
 		86208CD1A566ECA2411EAA66 /* MainlineWatchWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainlineWatchWidget.swift; sourceTree = "<group>"; };
@@ -136,12 +148,15 @@
 		98F7FA90F91D78AA6647D544 /* ConnectivityService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectivityService.swift; sourceTree = "<group>"; };
 		9B2BC6F74DFFB3671F1B5079 /* MainlineiOSWidget.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = MainlineiOSWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		9BE18A093BEC246DF52A6FB3 /* MorningMainlineTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = MorningMainlineTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		BFE8193478F3F0011D3EBF3C /* LocationProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationProvider.swift; sourceTree = "<group>"; };
 		C3C20D7AE446D7FB406098E9 /* AppGroupSharedStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppGroupSharedStore.swift; sourceTree = "<group>"; };
 		C3CC14B4BDE389E83050559D /* MorningMainlineWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MorningMainlineWatchApp.swift; sourceTree = "<group>"; };
+		C5707B08272527BAF8921D49 /* SharedSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedSettingsStore.swift; sourceTree = "<group>"; };
 		C5B493C8FC40180E22A0A3D7 /* ReminderScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderScheduler.swift; sourceTree = "<group>"; };
 		C9CE0CC7FA428822CAEAE919 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		DC421D99DB56498D1D176C27 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		E2A9EB9B94D439A095BD5A37 /* MainlineWidgetShared.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainlineWidgetShared.swift; sourceTree = "<group>"; };
+		E511F6D7FD0B7770B311D983 /* DestinationGrouping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DestinationGrouping.swift; sourceTree = "<group>"; };
 		EA65DCE4157E78B70E8C21F0 /* WebHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebHost.swift; sourceTree = "<group>"; };
 		EFCC2BCC4CEEAD49918A2F4A /* MainlineiOSWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainlineiOSWidget.swift; sourceTree = "<group>"; };
 		F0BC7E8AF711B8314D83B022 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -189,10 +204,13 @@
 			children = (
 				C3C20D7AE446D7FB406098E9 /* AppGroupSharedStore.swift */,
 				1E9A2635C55F0B2920F75C7D /* CloudSnapshotStore.swift */,
+				32C5E1D1AF91D477C840CE73 /* CommuteService.swift */,
 				98F7FA90F91D78AA6647D544 /* ConnectivityService.swift */,
+				BFE8193478F3F0011D3EBF3C /* LocationProvider.swift */,
 				C5B493C8FC40180E22A0A3D7 /* ReminderScheduler.swift */,
 				79C9D45333DF4368CADE33B3 /* RemoteRoutineParsingService.swift */,
 				6AB6CC70F649647AE9589AF3 /* RoutineParsingService.swift */,
+				C5707B08272527BAF8921D49 /* SharedSettingsStore.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -212,7 +230,10 @@
 			isa = PBXGroup;
 			children = (
 				C9CE0CC7FA428822CAEAE919 /* Assets.xcassets */,
+				E511F6D7FD0B7770B311D983 /* DestinationGrouping.swift */,
+				78E091D2AC33C30063D5EF5E /* ItinerarySplitter.swift */,
 				C3CC14B4BDE389E83050559D /* MorningMainlineWatchApp.swift */,
+				4F9B8E08BC6E6493F7A749A9 /* WatchQuickCreateView.swift */,
 				115B2276EC22382FDECAA411 /* WatchRoutineView.swift */,
 			);
 			path = Watch;
@@ -392,6 +413,7 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					1E0FC3B41F508E491B70D0B1 = {
+						DevelopmentTeam = HN3GC82LRP;
 						ProvisioningStyle = Automatic;
 					};
 					35980832CE1839F631E4C3B4 = {
@@ -474,7 +496,11 @@
 			files = (
 				031853ED13064B786A4BA60C /* AppGroupSharedStore.swift in Sources */,
 				88E9AEBE621A66433EF4B269 /* CloudSnapshotStore.swift in Sources */,
+				37913E48DF5BD238CCFE643C /* CommuteService.swift in Sources */,
 				3A1B35D481F6FF99212FD8E7 /* ConnectivityService.swift in Sources */,
+				91776E2E4A4BDC3EDCE046BC /* DestinationGrouping.swift in Sources */,
+				B312325A165AC961FD657E6C /* ItinerarySplitter.swift in Sources */,
+				C6579D064152D791A533459A /* LocationProvider.swift in Sources */,
 				4021999995DF1EBEE9CD0EB8 /* MainlineWidgetShared.swift in Sources */,
 				0119AE191AA9ED564081B936 /* MorningMainlineWatchApp.swift in Sources */,
 				BB07DA6BF92F57DAD2DD81FD /* ReminderScheduler.swift in Sources */,
@@ -482,6 +508,8 @@
 				A95E300B57AAFFAF9B1F993E /* RoutineModels.swift in Sources */,
 				107F055A3E253471C12898D8 /* RoutineParsingService.swift in Sources */,
 				D94BD656820222019244AC67 /* RoutineStore.swift in Sources */,
+				4C42688B3988D71CAB399BED /* SharedSettingsStore.swift in Sources */,
+				A3132C33DD521BC8A18A6305 /* WatchQuickCreateView.swift in Sources */,
 				AD73D002B1423B5E0AAA7862 /* WatchRoutineView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -500,8 +528,10 @@
 			files = (
 				17A05F62140300B6D600C7A7 /* AppGroupSharedStore.swift in Sources */,
 				E34D7E2AD4EBC7243C2B8C51 /* CloudSnapshotStore.swift in Sources */,
+				A601B3BC918D3FBB8D741B18 /* CommuteService.swift in Sources */,
 				0DF01694E09D1EF755C3552B /* ConnectivityService.swift in Sources */,
 				7E4F6E767A19806170D08D30 /* ContentView.swift in Sources */,
+				CBB494D92CE0709E1857424B /* LocationProvider.swift in Sources */,
 				849828E257647E9E72DB3084 /* MainlineWidgetShared.swift in Sources */,
 				D30B3DB38FC973BA862792EA /* MorningMainlineApp.swift in Sources */,
 				D74EA92D7414624CBDA15284 /* ReminderScheduler.swift in Sources */,
@@ -509,6 +539,7 @@
 				A37F93138C8577441BC04C7B /* RoutineModels.swift in Sources */,
 				D239D8636B4E20D9D4069501 /* RoutineParsingService.swift in Sources */,
 				4C9A220D04177D68402749CF /* RoutineStore.swift in Sources */,
+				BF3A68A9B0357BE913B151EE /* SharedSettingsStore.swift in Sources */,
 				36734146BBDE916025F56395 /* WebHost.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -556,7 +587,6 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = iOS/MorningMainline.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = HN3GC82LRP;
 				INFOPLIST_FILE = iOS/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -608,7 +638,6 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = iOS/MorningMainline.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = HN3GC82LRP;
 				INFOPLIST_FILE = iOS/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (

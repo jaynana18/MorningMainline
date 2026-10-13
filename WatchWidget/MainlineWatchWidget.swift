@@ -28,7 +28,7 @@ struct MainlineCircularComplication: Widget {
                 .containerBackground(for: .widget) { Color.clear }
         }
         .configurationDisplayName("不跑偏 · 圆形")
-        .description("显示当前主线任务倒计时")
+        .description("显示当前主线任务与倒计时")
         .supportedFamilies([.accessoryCircular])
     }
 }
@@ -43,7 +43,7 @@ struct MainlineRectangularComplication: Widget {
                 .containerBackground(for: .widget) { Color.clear }
         }
         .configurationDisplayName("不跑偏 · 矩形")
-        .description("显示当前任务、倒计时与预计完成时间")
+        .description("显示当前任务、剩余时间与预计完成时间")
         .supportedFamilies([.accessoryRectangular])
     }
 }
@@ -62,13 +62,42 @@ struct WatchTimelineProvider: TimelineProvider {
     func getTimeline(in context: Context, completion: @escaping (Timeline<MainlineWidgetEntry>) -> Void) {
         let now = Date()
         let entry = MainlineWidgetProvider.entry(for: now)
-        // 每分钟刷新一次，保持倒计时/预计时间近似实时。
+        // 这里只负责「换任务 / 换预计时间」这类结构性刷新。**倒计时不靠它** ——
+        // 秒级数字交给 `Text(timerInterval:)` 由系统自渲染；否则每分钟才刷一次 timeline，
+        // 表盘上的剩余时间最多会陈旧 60 秒（看起来像卡住不动）。
         let next = Calendar.current.date(byAdding: .minute, value: 1, to: now) ?? now
         completion(Timeline(entries: [entry], policy: .after(next)))
     }
 }
 
 // MARK: - Views
+
+/// 系统自渲染的倒计时。
+///
+/// `Text(timerInterval:countsDown:)` 由系统逐秒更新，不消耗 timeline 预算 ——
+/// 这是表盘能显示「实时剩余时间」而不被 60 秒刷新率卡住的唯一做法。
+/// 已过期时区间非法（起点晚于终点会崩溃），故回落到静态的「已超时」。
+private struct ComplicationCountdown: View {
+    let dueAt: Date
+    let now: Date
+    var font: Font
+
+    var body: some View {
+        if dueAt > now {
+            Text(timerInterval: now...dueAt, countsDown: true)
+                .font(font)
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+        } else {
+            Text("已超时")
+                .font(font)
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+                .foregroundStyle(.red)
+        }
+    }
+}
 
 struct MainlineComplicationCornerView: View {
     let entry: MainlineWidgetEntry
@@ -79,12 +108,13 @@ struct MainlineComplicationCornerView: View {
                 .font(.system(size: 9, weight: .bold))
                 .lineLimit(1)
                 .widgetLabel {
-                    if let estimated = entry.estimatedCompletion, entry.delayDuration > 0 {
-                        Text("预计 \(estimated.formatted(date: .omitted, time: .shortened)) · 晚 \(compactDelay(entry.delayDuration))")
+                    if let due = entry.currentDueAt, due > entry.date {
+                        // 角落槽位由系统渲染倒计时，这里只给区间。
+                        Text(timerInterval: entry.date...due, countsDown: true)
+                    } else if entry.currentDueAt != nil {
+                        Text("已超时")
                     } else if let estimated = entry.estimatedCompletion {
-                        Text("预计 \(estimated.formatted(date: .omitted, time: .shortened)) · 未延误")
-                    } else if let due = entry.currentDueAt {
-                        Text(short(due.timeIntervalSince(entry.date)))
+                        Text("预计 \(estimated.formatted(date: .omitted, time: .shortened))")
                     } else {
                         Text("进行中")
                     }
@@ -111,19 +141,17 @@ struct MainlineComplicationCircularView: View {
                     .font(.system(size: 9, weight: .bold))
                     .lineLimit(1)
                     .minimumScaleFactor(0.65)
-                if let estimated = entry.estimatedCompletion {
-                    Text("预计\(estimated.formatted(date: .omitted, time: .shortened))")
-                        .font(.system(size: 7, weight: .semibold, design: .rounded))
-                        .minimumScaleFactor(0.65)
-                }
-                if entry.delayDuration > 0 {
+                if let due = entry.currentDueAt {
+                    // 圆槽位空间小，倒计时只到分秒：`1:05` 比 `1分5秒` 省一半宽度。
+                    ComplicationCountdown(
+                        dueAt: due,
+                        now: entry.date,
+                        font: .system(size: 11, weight: .semibold, design: .rounded)
+                    )
+                } else if entry.delayDuration > 0 {
                     Text("晚\(compactDelay(entry.delayDuration))")
                         .font(.system(size: 8, weight: .bold, design: .rounded))
                         .foregroundStyle(.red)
-                } else {
-                    Text("未延误")
-                        .font(.system(size: 7, weight: .semibold))
-                        .foregroundStyle(.secondary)
                 }
             }
         } else if entry.hasActiveSession {
@@ -149,15 +177,29 @@ struct MainlineComplicationRectangularView: View {
                 Text(title)
                     .font(.system(size: 12, weight: .bold))
                     .lineLimit(1)
-                if entry.delayDuration > 0 {
+
+                // 剩余时间：系统实时倒数，不再等 timeline 刷新。
+                if let due = entry.currentDueAt {
+                    HStack(spacing: 4) {
+                        Text("还剩")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                        ComplicationCountdown(
+                            dueAt: due,
+                            now: entry.date,
+                            font: .system(size: 12, weight: .semibold, design: .rounded)
+                        )
+                        // 两个分支必须同类型：`.primary` 是 HierarchicalShapeStyle，
+                        // `.red` 是 Color，写成裸 `.primary : .red` 会让编译器无法统一而报错。
+                        // 显式写 Color.primary / Color.red 才推得出来。
+                        .foregroundStyle(due > entry.date ? Color.primary : Color.red)
+                    }
+                } else if entry.delayDuration > 0 {
                     Text("已延误 \(short(entry.delayDuration))")
                         .font(.system(size: 11, weight: .bold, design: .rounded))
                         .foregroundStyle(.red)
-                } else if let due = entry.currentDueAt {
-                    Text("还剩 \(short(due.timeIntervalSince(entry.date)))")
-                        .font(.system(size: 11, design: .rounded))
-                        .foregroundStyle(entry.isHardDeadline ? .red : .secondary)
                 }
+
                 if let estimated = entry.estimatedCompletion {
                     Text("预计 \(estimated.formatted(date: .omitted, time: .shortened)) 完成")
                         .font(.system(size: 10))

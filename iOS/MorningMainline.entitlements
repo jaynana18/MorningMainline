@@ -6,5 +6,21 @@
     <array>
         <string>group.com.jaynana.MorningMainline</string>
     </array>
+
+    <!--
+      刻意不含 com.apple.developer.usernotifications.time-sensitive（2026-10-13 摘除）。
+
+      原因：本工程用**个人团队**（免费 Apple ID）签名，而该 capability 只有付费
+      Apple Developer Program 支持。声明它会让 Xcode **连开发描述文件都生成不出来**
+      → 整个工程打不出包（不只是那项能力失效）。
+
+      代价：`ReminderScheduler` 与 `WebHost.presentLocalNotification` 里设的
+      `interruptionLevel = .timeSensitive` 会被系统静默降级为普通通知，
+      即**突破专注模式失效**（其余提醒功能正常）。代码无需改动。
+
+      将来升级付费账号后恢复：在 Apple 后台给 App ID
+      `com.jaynana.MorningMainline` 勾选 Time Sensitive Notifications，
+      再把本 key 加回该 <dict> 内即可。
+    -->
 </dict>
 </plist>

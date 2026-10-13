@@ -35,6 +35,8 @@ import { parseTaskPlan } from '../platform/taskParsing';
 import { isIncomplete } from '../core/session';
 import { RoutineStore } from '../core/store';
 import type { PlatformBridge } from '../platform/bridge';
+import { EMPTY_SHARED_SETTINGS, type SharedSettings } from '../platform/bridge';
+import type { CommuteRoute } from '../platform/commute';
 import { resolveBridge } from '../platform/hostBridge';
 
 // 重导出：视图层经 store 取用（避免直接 import core）。
@@ -45,6 +47,8 @@ export { deadlineOn, taskSteps } from '../core/session';
 export { editTasks } from '../core/taskEdits';
 export { queryCommute } from '../platform/commute';
 export type { TravelMode, CommuteRoute } from '../platform/commute';
+// 跨设备设置类型经 store 中转（视图层不直接 import platform/）。
+export type { SharedSettings } from '../platform/bridge';
 export { createStep } from '../core/types';
 // 会话页（SessionView）需要的派生纯函数：预计排程 / 是否迟到 / 未完成判定 / 原计划时间。
 export {
@@ -138,6 +142,13 @@ export const useRoutineStore = defineStore('routine', () => {
   // 「已选但未开始」的模板：点任务卡 / 保存新建后进入预览页，选完计划才真正 start。
   // 对齐 Swift `ContentView.selectedTemplate` 的 `navigationDestination(item:)`。
   const pendingTemplate = ref<RoutineTemplate | null>(null);
+  /**
+   * 跨设备共用设置（高德 Key / 出行方式）。
+   *
+   * 放在 store 而非组件里：创建页与设置页都要读它，且值经原生同步到手表，
+   * 属于会话级的共享状态。浏览器宿主下只有本页有效（无手表、无 App Group）。
+   */
+  const settings = ref<SharedSettings>({ ...EMPTY_SHARED_SETTINGS });
 
   // core 状态机实例在 init() 中建（需先拿到持久的 deviceInfo）。
   let routine: RoutineStore | null = null;
@@ -212,6 +223,8 @@ export const useRoutineStore = defineStore('routine', () => {
   async function performInit(): Promise<void> {
     const info = await bridge.deviceInfo();
     const stored = await bridge.readSnapshot();
+    // 设置读失败不该拖垮 init —— 拿不到就用空值，交通方式回落开车。
+    settings.value = await bridge.readSettings().catch(() => ({ ...EMPTY_SHARED_SETTINGS }));
     routine = new RoutineStore({
       deviceRole: info.role,
       deviceID: info.id,
@@ -248,6 +261,19 @@ export const useRoutineStore = defineStore('routine', () => {
   function dispose(): void {
     unsubscribeSnapshotChanged?.();
     unsubscribeSnapshotChanged = null;
+  }
+
+  /**
+   * 保存跨设备设置。
+   *
+   * **必须走桥**：浏览器宿主下写 localStorage 只对本页有效，手表读不到。
+   * WebView 宿主下原生会写进 App Group 并经 WCSession 广播给手表，
+   * 手表上的一句话创建才能用同一个 Key 选点。
+   */
+  async function saveSettings(next: Partial<SharedSettings>): Promise<void> {
+    const merged: SharedSettings = { ...settings.value, ...next };
+    settings.value = merged;
+    await bridge.writeSettings(merged);
   }
 
   async function parse(input: string): Promise<ParseResult> {
@@ -353,6 +379,17 @@ export const useRoutineStore = defineStore('routine', () => {
     commit();
   }
 
+  /**
+   * 写回重算后的通勤路线（排序后每段通勤的出发地随新前驱变化）。
+   * 与 `reorderPendingTasks` 配套：先改顺序，再改该顺序对应的路线。
+   */
+  function applyCommuteRoutes(
+    updates: ReadonlyArray<{ progressID: string; commute: CommuteRoute; duration?: number }>,
+  ): void {
+    requireRoutine().applyCommuteRoutes(updates);
+    commit();
+  }
+
   function deleteFromCurrentSession(progress: StepProgress): void {
     requireRoutine().deleteFromCurrentSession(progress);
     commit();
@@ -384,6 +421,7 @@ export const useRoutineStore = defineStore('routine', () => {
     lastParse,
     notice,
     pendingTemplate,
+    settings,
     // getters
     session,
     currentProgress,
@@ -393,6 +431,7 @@ export const useRoutineStore = defineStore('routine', () => {
     init,
     ensureReady,
     dispose,
+    saveSettings,
     parse,
     parsePlan,
     createTemplate,
@@ -407,6 +446,7 @@ export const useRoutineStore = defineStore('routine', () => {
     snoozeCurrent,
     addTemporaryTask,
     reorderPendingTasks,
+    applyCommuteRoutes,
     deleteFromCurrentSession,
     cancel,
     finish,

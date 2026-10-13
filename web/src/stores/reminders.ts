@@ -21,7 +21,13 @@
 
 import { ref } from 'vue';
 import { defineStore } from 'pinia';
-import { allReminders, type ReminderMessage } from '../core/reminders';
+import {
+  allReminders,
+  overdueReminder,
+  overdueRound,
+  overdueSecondsOf,
+  type ReminderMessage,
+} from '../core/reminders';
 import type { PlatformBridge } from '../platform/bridge';
 import { resolveStoreBridge, useRoutineStore } from './routine';
 
@@ -44,6 +50,25 @@ export const REMINDER_TICK_MS = 1000;
 /** 前台可见时，到点已超过此时长的提醒不再弹窗（避免补弹一堆过时提醒）。 */
 export const VISIBLE_CATCH_UP_MS = 90_000;
 
+/**
+ * 超时循环提醒的弹窗停留时长：约几秒自动关闭，之后下一轮再弹。
+ *
+ * 为什么不一直挂着：常驻不走的弹窗会挡住时间线，而用户可能正需要看它来决定
+ * 「砍哪一步」。所以它是**间歇性**的打断（弹 → 自动收 → 过一会再弹），
+ * 而不是一个需要用户手动关掉的障碍。
+ */
+export const OVERDUE_AUTO_DISMISS_MS = 6_000;
+
+/**
+ * 超时循环提醒的候选（可见通道）。
+ *
+ * 与前两类提醒的关键差别：**它不看 `firedKeys` 去重，而是看「第几轮」**。
+ * 每一轮有自己的 key（`overdue:<id>:<round>`），所以天然「每 2 分钟重新入队一次」；
+ * 反过来，同一轮即使 tick 了很多次也只入队一次。
+ *
+ * 只对**当前任务**判定（与 `focusedTask` 同口径）：上一项没结束就提醒下一项，
+ * 正是本轮要修掉的 bug。
+ */
 export const useRemindersStore = defineStore('reminders', () => {
   const routineStore = useRoutineStore();
   const bridge: PlatformBridge = resolveStoreBridge();
@@ -71,11 +96,17 @@ export const useRemindersStore = defineStore('reminders', () => {
 
   // ---- 运行时句柄 ----
   let timer: ReturnType<typeof setInterval> | null = null;
+  /** 超时弹窗的自动关闭计时器，`stop()` 时统一清理。 */
+  const overdueTimers = new Set<ReturnType<typeof setTimeout>>();
   let unsubscribeNotificationOpened: (() => void) | null = null;
   let unsubscribeAppState: (() => void) | null = null;
   let started = false;
 
-  /** 入队弹窗：`active` 为空则直接显示，否则压入队列；同 key 不重复入队。 */
+  /**
+   * 入队弹窗：`active` 为空则直接显示，否则压入队列；同 key 不重复入队。
+   *
+   * 超时提醒额外挂一个自动关闭计时器（弹几秒 → 收起 → 下一轮再弹）。
+   */
   function enqueuePopup(reminder: ReminderMessage): void {
     if (
       active.value?.key === reminder.key ||
@@ -88,6 +119,71 @@ export const useRemindersStore = defineStore('reminders', () => {
     } else {
       queue.value.push(reminder);
     }
+    if (isOverdueReminder(reminder)) {
+      scheduleOverdueAutoDismiss(reminder.key);
+    }
+  }
+
+  /**
+   * 给超时弹窗安排自动关闭。
+   *
+   * ⚠️ 必须**按 key 比对**再关：这几秒内用户可能已经点了「知道了」，
+   * 甚至队列里已经换上另一条提醒。不看 key 就会把别人的弹窗关掉。
+   *
+   * 计时器统一记录在 `overdueTimers` 里，`stop()` 时全部清掉，
+   * 免得多实例/热更新下泄漏。
+   */
+  function scheduleOverdueAutoDismiss(key: string): void {
+    const timer = setTimeout(() => {
+      overdueTimers.delete(timer);
+      if (active.value?.key !== key) {
+        // 已经换人（用户关过 / 队列前进）→ 什么都不做。
+        return;
+      }
+      // 队列里还有别的提醒时也让它先播完，不在这里抢。
+      if (queue.value.length > 0) {
+        return;
+      }
+      active.value = null;
+    }, OVERDUE_AUTO_DISMISS_MS);
+    overdueTimers.add(timer);
+  }
+
+  /** 是否为超时循环提醒（key 前缀判定，文案单一来源仍归 core）。 */
+  function isOverdueReminder(reminder: ReminderMessage): boolean {
+    return reminder.key.startsWith('overdue:');
+  }
+
+  /** 从 `overdue:<progressID>:<round>` 取出 progressID。 */
+  function overdueKeyProgressID(key: string): string {
+    return key.split(':')[1] ?? '';
+  }
+
+  /**
+   * 超时循环提醒的候选。
+   *
+   * 与前两类提醒的关键差别：**它不看 `firedKeys` 去重，而是看「第几轮」**。
+   * 每一轮有自己的 key（`overdue:<id>:<round>`），所以天然「每 2 分钟重新投递一次」；
+   * 反过来，同一轮即使 tick 了很多次也只投递一次。
+   *
+   * 只对**当前任务**判定（与 `focusedTask` 同口径）：上一项没结束就提醒下一项，
+   * 正是本轮要修掉的 bug。
+   */
+  function overdueCandidate(now: Date): ReminderMessage | null {
+    const session = routineStore.session;
+    if (session === null || session.state !== 'running') {
+      return null;
+    }
+    const current = routineStore.currentProgress;
+    if (current === null) {
+      return null;
+    }
+    const seconds = overdueSecondsOf(current, now);
+    const round = overdueRound(seconds);
+    if (round < 0) {
+      return null;
+    }
+    return overdueReminder(current, session.id, now, round);
   }
 
   /**
@@ -98,15 +194,30 @@ export const useRemindersStore = defineStore('reminders', () => {
    */
   function tick(now: Date = new Date()): void {
     const candidates = allReminders(routineStore.session);
+    // 当前会话的 progress id 集合：用来判定一条超时轮次记录是否还有意义。
+    const liveProgressIDs = new Set(
+      (routineStore.session?.progress ?? []).map((item) => item.id),
+    );
 
     // 裁剪去重集：会话结束/换会话后，旧键不再出现在候选集里 → 自动失效。
+    // ⚠️ 超时提醒的 key 不在 `candidates` 里（它按轮次独立判定），不能一并裁掉 ——
+    // 否则每 tick 都被裁掉、同一轮反复投递，通知中心会被刷屏。
+    // 但也不能无限累积：只保留「其 progress 仍在当前会话里」的那些（换会话/任务删除后回收）。
     firedKeys = new Set(
-      [...firedKeys].filter((key) => candidates.some((candidate) => candidate.key === key)),
+      [...firedKeys].filter((key) => {
+        if (key.startsWith('overdue:')) {
+          return liveProgressIDs.has(overdueKeyProgressID(key));
+        }
+        return candidates.some((candidate) => candidate.key === key);
+      }),
     );
 
     const due = candidates.filter(
       (reminder) => reminder.fireAt.getTime() <= now.getTime() && !firedKeys.has(reminder.key),
     );
+
+    // 超时循环提醒：独立于 `candidates` 判定（它按「轮次」而非一次性去重）。
+    const overdue = overdueCandidate(now);
 
     if (!visible.value) {
       for (const reminder of due) {
@@ -121,6 +232,22 @@ export const useRemindersStore = defineStore('reminders', () => {
           });
         }
         firedKeys.add(reminder.key);
+        stats.value.system += 1;
+      }
+      // 不可见时超时提醒同样交系统通道。
+      // ⚠️ 用 `firedKeys` 记已投递的**轮次**：本分支每次 tick 都会走到，
+      // 不记的话同一轮会在 1Hz 下被投递无数次（通知中心被刷屏）。
+      if (overdue !== null && !firedKeys.has(overdue.key)) {
+        if (bridge.capabilities.backgroundNotification) {
+          // 原生已预排了一串超时重复通知（`scheduleOverdueRepeats`），只标记。
+        } else {
+          void bridge.presentNotification({
+            title: overdue.title,
+            body: overdue.body,
+            level: overdue.level,
+          });
+        }
+        firedKeys.add(overdue.key);
         stats.value.system += 1;
       }
       return;
@@ -143,6 +270,14 @@ export const useRemindersStore = defineStore('reminders', () => {
         stats.value.local += 1;
       }
       firedKeys.add(reminder.key);
+    }
+
+    // 超时循环：`round` 变化即重新弹一次；同一轮内 tick 多次只弹一次。
+    // 不走 `staleForNow` 闸门 —— 超时越久越要提醒，正是那两道闸门要防的相反情形。
+    if (overdue !== null && !firedKeys.has(overdue.key)) {
+      firedKeys.add(overdue.key);
+      enqueuePopup(overdue);
+      stats.value.local += 1;
     }
   }
 
@@ -208,6 +343,10 @@ export const useRemindersStore = defineStore('reminders', () => {
       clearInterval(timer);
       timer = null;
     }
+    for (const pending of overdueTimers) {
+      clearTimeout(pending);
+    }
+    overdueTimers.clear();
     unsubscribeAppState?.();
     unsubscribeAppState = null;
     unsubscribeNotificationOpened?.();

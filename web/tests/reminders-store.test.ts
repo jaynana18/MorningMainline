@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { setRoutineBridge, useRoutineStore } from '../src/stores/routine';
-import { useRemindersStore } from '../src/stores/reminders';
+import { OVERDUE_AUTO_DISMISS_MS, useRemindersStore } from '../src/stores/reminders';
 import { createMockBridge, type MockBridge } from '../src/platform/mock';
 import type { BridgeCapabilities } from '../src/platform/bridge';
 import { allReminders } from '../src/core/reminders';
@@ -466,3 +466,208 @@ describe('stores/reminders — start/stop 幂等', () => {
     }).not.toThrow();
   });
 });
+
+// ---------------------------------------------------------------------------
+// 超时循环提醒（2026-10-14 新增）
+// ---------------------------------------------------------------------------
+
+describe('stores/reminders — 超时每 2 分钟循环提醒（可见 → 页内弹窗）', () => {
+  /** 造一个「正在进行的任务」，起点 11:00、时长 10 分钟 → 11:10 起超时。 */
+  function makeActiveBridge(capabilities: Partial<BridgeCapabilities> = {}): MockBridge {
+    const startedAt = new Date(2026, 7, 13, 11, 0, 0);
+    const task = createProgress({
+      id: 'P-OVD',
+      step: createStep({ title: '写代码', duration: 10 * 60 }),
+      dueAt: new Date(2026, 7, 13, 11, 10, 0),
+      state: 'active',
+      startedAt,
+    });
+    const deadlineItem = createProgress({
+      step: createStep({
+        title: '完成',
+        duration: 0,
+        importance: 'hardDeadline',
+        role: 'deadline',
+      }),
+      dueAt: DEADLINE,
+      state: 'pending',
+    });
+    const session = createSession({
+      id: SID,
+      templateID: 'T',
+      templateName: '任务线',
+      templateSymbol: 'sun.max.fill',
+      startedAt,
+      plannedStartAt: startedAt,
+      targetDeadline: DEADLINE,
+      state: 'running',
+      primaryDevice: 'phone',
+      progress: [task, deadlineItem],
+      remainingBuffer: 0,
+      updatedAt: startedAt,
+      revision: 1,
+      activeProgressID: task.id,
+    });
+    return createMockBridge({
+      initialSnapshot: createSnapshot({
+        templates: [],
+        activeSession: session,
+        updatedAt: session.updatedAt,
+      }),
+      capabilities,
+    });
+  }
+
+  it('超时不满 2 分钟 → 不弹超时提醒（到点那一刻已经由 taskReminder 响过）', async () => {
+    const bridge = makeActiveBridge();
+    const { reminders } = setup(bridge);
+    vi.setSystemTime(new Date(2026, 7, 13, 11, 10, 0));
+    await reminders.start();
+
+    // 11:11:30 → 超时 90 秒，不满 2 分钟。
+    reminders.tick(new Date(2026, 7, 13, 11, 11, 30));
+    expect(reminders.active?.key.startsWith('overdue:')).not.toBe(true);
+  });
+
+  it('超时满 2 分钟 → 弹超时提醒；文案为实际超时分钟数', async () => {
+    const bridge = makeActiveBridge();
+    const { reminders } = setup(bridge);
+    vi.setSystemTime(new Date(2026, 7, 13, 11, 0, 0));
+    await reminders.start();
+
+    reminders.tick(new Date(2026, 7, 13, 11, 12, 5)); // 超时 125 秒 → ceil = 3 分钟
+    expect(reminders.active?.key).toBe('overdue:P-OVD:0');
+    expect(reminders.active?.title).toBe('不跑偏 · 超时了');
+    expect(reminders.active?.body).toBe('“写代码”已经超了 3 分钟，先把它收尾。');
+    expect(reminders.active?.level).toBe('timeSensitive');
+    expect(reminders.active?.sound).toBe('overdue');
+  });
+
+  it('同一轮内 tick 多次只入队一次（不刷屏）', async () => {
+    const bridge = makeActiveBridge();
+    const { reminders } = setup(bridge);
+    vi.setSystemTime(new Date(2026, 7, 13, 11, 0, 0));
+    await reminders.start();
+
+    reminders.tick(new Date(2026, 7, 13, 11, 12, 0));
+    const after = reminders.stats.local;
+    reminders.tick(new Date(2026, 7, 13, 11, 12, 1));
+    reminders.tick(new Date(2026, 7, 13, 11, 13, 0));
+    expect(reminders.stats.local).toBe(after);
+    expect(reminders.queue).toHaveLength(0);
+  });
+
+  it('🔴 每满 2 分钟进入新一轮 → 再次弹窗（循环）', async () => {
+    const bridge = makeActiveBridge();
+    const { reminders } = setup(bridge);
+    vi.setSystemTime(new Date(2026, 7, 13, 11, 0, 0));
+    await reminders.start();
+
+    reminders.tick(new Date(2026, 7, 13, 11, 12, 0)); // 第 0 轮
+    expect(reminders.active?.key).toBe('overdue:P-OVD:0');
+    reminders.dismiss();
+
+    reminders.tick(new Date(2026, 7, 13, 11, 14, 0)); // 超时 4 分钟 → 第 1 轮
+    expect(reminders.active?.key).toBe('overdue:P-OVD:1');
+    expect(reminders.active?.body).toBe('“写代码”已经超了 4 分钟，先把它收尾。');
+    reminders.dismiss();
+
+    reminders.tick(new Date(2026, 7, 13, 11, 16, 30)); // 超时 6.5 分钟 → 第 2 轮
+    expect(reminders.active?.key).toBe('overdue:P-OVD:2');
+    expect(reminders.active?.body).toBe('“写代码”已经超了 7 分钟，先把它收尾。');
+  });
+
+  it('弹窗约几秒后自动关闭（不用用户手动点）', async () => {
+    const bridge = makeActiveBridge();
+    const { reminders } = setup(bridge);
+    vi.setSystemTime(new Date(2026, 7, 13, 11, 0, 0));
+    await reminders.start();
+
+    reminders.tick(new Date(2026, 7, 13, 11, 12, 0));
+    expect(reminders.active?.key).toBe('overdue:P-OVD:0');
+
+    vi.advanceTimersByTime(OVERDUE_AUTO_DISMISS_MS + 10);
+    expect(reminders.active).toBeNull();
+  });
+
+  it('自动关闭不会误关别人：用户已手动关掉并换上另一条时不动它', async () => {
+    const bridge = makeActiveBridge();
+    const { reminders } = setup(bridge);
+    vi.setSystemTime(new Date(2026, 7, 13, 11, 0, 0));
+    await reminders.start();
+
+    reminders.tick(new Date(2026, 7, 13, 11, 12, 0));
+    const overdueKey = reminders.active!.key;
+    expect(overdueKey).toBe('overdue:P-OVD:0');
+
+    // 用户立刻点了「知道了」，紧接着 deadline 里程碑弹了出来。
+    reminders.dismiss();
+    reminders.tick(new Date(2026, 7, 13, 12, 2, 0)); // 🚨 Deadline 已延误 2 分钟
+    const milestoneKey = reminders.active?.key;
+    expect(milestoneKey).not.toBeUndefined();
+    expect(milestoneKey).not.toBe(overdueKey);
+
+    vi.advanceTimersByTime(OVERDUE_AUTO_DISMISS_MS + 10);
+    // 过期的那个计时器不该把当前这条里程碑关掉。
+    expect(reminders.active?.key).toBe(milestoneKey);
+  });
+
+  it('页面不可见 → 走系统通道（双通道互斥）', async () => {
+    const bridge = makeActiveBridge({ backgroundNotification: false });
+    const { reminders } = setup(bridge);
+    vi.setSystemTime(new Date(2026, 7, 13, 11, 0, 0));
+    await reminders.start();
+
+    reminders.visible = false;
+    reminders.tick(new Date(2026, 7, 13, 11, 12, 0));
+
+    // 两条各自独立：任务到点（dueAt=11:10，首轮 tick 才被看到）+ 超时第 0 轮。
+    expect(reminders.active).toBeNull();
+    expect(bridge.presentNotificationCalls).toHaveLength(2);
+    expect(bridge.presentNotificationCalls.at(-1)?.title).toBe('不跑偏 · 超时了');
+    expect(reminders.stats.system).toBe(2);
+  });
+
+  it('后台同一轮重复 tick 不重复投递（否则 1Hz 刷屏）', async () => {
+    const bridge = makeActiveBridge({ backgroundNotification: false });
+    const { reminders } = setup(bridge);
+    vi.setSystemTime(new Date(2026, 7, 13, 11, 0, 0));
+    await reminders.start();
+
+    reminders.visible = false;
+    reminders.tick(new Date(2026, 7, 13, 11, 12, 0));
+    // 首轮 tick 会有两条：任务到点（dueAt=11:10）+ 超时第 0 轮。
+    const after = bridge.presentNotificationCalls.length;
+    expect(after).toBe(2);
+
+    // 之后同一轮的每次 tick 都不该再投。
+    reminders.tick(new Date(2026, 7, 13, 11, 12, 30));
+    reminders.tick(new Date(2026, 7, 13, 11, 13, 0));
+    expect(bridge.presentNotificationCalls).toHaveLength(after);
+
+    // 满 4 分钟 → 新一轮，再投一条。
+    reminders.tick(new Date(2026, 7, 13, 11, 14, 0));
+    expect(bridge.presentNotificationCalls).toHaveLength(after + 1);
+    expect(bridge.presentNotificationCalls.at(-1)?.title).toBe('不跑偏 · 超时了');
+  });
+
+  it('任务完成 → 停止超时提醒（不再有候选）', async () => {
+    const bridge = makeActiveBridge();
+    const { reminders, routine } = setup(bridge);
+    vi.setSystemTime(new Date(2026, 7, 13, 11, 0, 0));
+    await reminders.start();
+    await routine.ensureReady();
+
+    reminders.tick(new Date(2026, 7, 13, 11, 12, 0));
+    expect(reminders.active?.key).toBe('overdue:P-OVD:0');
+    reminders.dismiss();
+
+    // 走真实 store 动作把当前任务收尾（比直接改对象更接近实际调用路径）。
+    const task = routine.session!.progress.find((item) => item.id === 'P-OVD')!;
+    routine.complete(task, new Date(2026, 7, 13, 11, 13, 0));
+
+    reminders.tick(new Date(2026, 7, 13, 11, 14, 0));
+    expect(reminders.active).toBeNull();
+  });
+});
+

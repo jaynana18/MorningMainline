@@ -13,7 +13,9 @@ import type {
   NotificationOpenedPayload,
   NotificationPayload,
   PlatformBridge,
+  SharedSettings,
 } from './bridge';
+import { EMPTY_SHARED_SETTINGS } from './bridge';
 
 export interface MockBridgeOptions {
   host?: 'webview' | 'browser';
@@ -38,12 +40,15 @@ export class MockBridge implements PlatformBridge {
   readonly presentNotificationCalls: NotificationPayload[] = [];
   readonly foregroundReminderReadyStates: boolean[] = [];
   readonly parseWithModelCalls: string[] = [];
+  /** 每次 `writeSettings` 的快照，供断言「填 Key 后是否真的写下去」。 */
+  readonly writeSettingsCalls: SharedSettings[] = [];
   deviceInfoCallCount = 0;
   requestAuthorizationCallCount = 0;
 
   private readonly deviceId: string;
   private readonly deviceRole: DeviceRole;
   private snapshot: RoutineSnapshot | null;
+  private settings: SharedSettings = { ...EMPTY_SHARED_SETTINGS };
   private readonly modelParseResult: ParseResult | null;
   private readonly authorizationGranted: boolean;
 
@@ -82,6 +87,15 @@ export class MockBridge implements PlatformBridge {
     // 同步记录 + 同步落库（async 函数体在首个 await 前同步执行），便于测试直接断言。
     this.writeSnapshotCalls.push(cloneSnapshot(snapshot));
     this.snapshot = cloneSnapshot(snapshot);
+  }
+
+  async readSettings(): Promise<SharedSettings> {
+    return { ...this.settings };
+  }
+
+  async writeSettings(settings: SharedSettings): Promise<void> {
+    this.settings = { ...settings };
+    this.writeSettingsCalls.push({ ...settings });
   }
 
   async requestNotificationAuthorization(): Promise<boolean> {

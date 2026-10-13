@@ -654,3 +654,40 @@ private struct StubParsingService: RoutineParsingService {
         return result
     }
 }
+
+// MARK: - WebHostController 构造路径回归
+//
+// 背景（2026-10-14 修 #8「点击通知 App 闪退」）：
+// `WebHostController` 曾经把 `required init?(coder:)` 实现成
+// `fatalError("init(coder:) 未实现")` 并配 `@available(*, unavailable)`。
+// 那是全仓唯一「一旦被调用必定崩溃」的点，且只在**真机**路径上可能被踩到 ——
+// 模拟器一律经 `WebHost.makeUIViewController` → `init()`，永远碰不到它，
+// 所以「模拟器好好的、真机点通知就闪退」。
+//
+// 下面两条用例把「两条构造路径都必须能活着造出 WebView」钉死，
+// 防止这个 fatalError 被无知无觉地改回去。
+@MainActor
+final class WebHostControllerInitTests: XCTestCase {
+    /// App 在模拟器/真机上的常规路径：`WebHost.makeUIViewController` 用的就是这个。
+    func testPlainInitBuildsWebView() {
+        let controller = WebHostController()
+        XCTAssertNotNil(controller.view, "init() 必须能正常加载视图")
+        XCTAssertNotNil(controller.webView, "init() 必须建好 webView")
+    }
+
+    /// 🔴 回归重点：UIKit 走 `init(coder:)` 时**不能崩**。
+    ///
+    /// 真机上（尤其 `Info.plist` 声明了 `UIApplicationSupportsMultipleScenes = true` 时）
+    /// 系统可能经场景/状态恢复路径用本初始化器来实例化控制器；点系统通知冷启动正是
+    /// 最容易触发场景装配的时机。旧实现在这里直接 `fatalError` → 用户报的闪退。
+    func testCoderInitDoesNotCrash() throws {
+        let archived = try NSKeyedArchiver.archivedData(
+            withRootObject: ["stub": true],
+            requiringSecureCoding: false
+        )
+        let coder = try NSKeyedUnarchiver(forReadingFrom: archived)
+        let controller = WebHostController(coder: coder)
+        XCTAssertNotNil(controller, "init(coder:) 必须返回实例而不是崩溃")
+        XCTAssertNotNil(controller?.webView, "init(coder:) 也必须把 webView 建好")
+    }
+}

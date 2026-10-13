@@ -118,6 +118,11 @@
       <path d="M2.6 6.4h10.8M5.6 2.4v2M10.4 2.4v2" />
       <path d="M8 8v1.7l1.2.9" />
     </template>
+    <template v-else-if="name === 'route'">
+      <circle cx="4.3" cy="3.8" r="1.7" />
+      <circle cx="11.7" cy="12.2" r="1.7" />
+      <path d="M4.3 5.5v3.1a2.4 2.4 0 0 0 2.4 2.4h4.1" />
+    </template>
   </svg>
 </template>
 

@@ -74,7 +74,28 @@ const route = useRoute();
 onMounted(async () => {
   await loadAccount();
   if (account.user) { await store.init(); void reminders.start(); }
+  resumeRunningSession();
 });
+
+/**
+ * 冷启动回落到「进行中」会话页（2026-10-14）。
+ *
+ * 场景：用户在执行任务途中退出 App / 关掉页面 / 手机锁屏后重开。此时首页虽然有一条
+ * 「正在进行」的横幅入口，但用户还得自己再点一下 —— 而「正在执行的任务」本来就是
+ * 这个 App 唯一的主角，回到 App 应当直接落在它上面。
+ *
+ * 只在**冷启动**（本组件 onMounted，即 App 加载 / 页面刷新）时判断一次，
+ * 不 watch 会话状态：运行中→结束是用户主动点的「结束」，那时把人硬拽回会话页是骚扰。
+ *
+ * 且只在**落在首页**时才跳：App 内 WebView 每次启动都加载到首页，这正是要接住的场景；
+ * 而浏览器宿主里用户可能在 `/profile` 上刷新，把人从设置页拽走是没有理由的。
+ * 通知点击的回跳由上面那条 watch 负责，与此互不干扰。
+ */
+function resumeRunningSession(): void {
+  if (store.session?.state !== 'running') return;
+  if (router.currentRoute.value.name !== 'home') return;
+  void router.push('/session');
+}
 function resolveConflict(choice: string): void { window.dispatchEvent(new CustomEvent('mm-resolve-sync', { detail: choice })); }
 watch(() => !!account.user && route.name === 'create', open => {
   document.body.style.overflow = open ? 'hidden' : '';

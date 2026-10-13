@@ -13,6 +13,8 @@ web/node_modules/
 web/dist/
 web/.env.local
 web/.env.*.local
+# vite / vitest 每次运行都会重新生成的临时配置文件
+web/*.timestamp-*.mjs
 server/.env
 server/.env.account
 server/data/

@@ -4,12 +4,17 @@ import SwiftUI
 @MainActor
 final class RoutineStore: ObservableObject {
     @Published private(set) var snapshot: RoutineSnapshot
+    /// 跨设备共用的轻量设置（高德 Key、出行方式）。
+    /// 手表靠它拿到 iPhone 上填的高德 Key —— App Group 跨不了设备，走 WCSession 同步。
+    @Published private(set) var settings: MainlineSettings
 
     let deviceRole: DeviceRole
     /// 供 WebView 宿主（`iOS/WebHost.swift`）读取的稳定设备 id。
     /// **必须与私有 `deviceID` 同源**：JS 侧会把 `device.info` 的 id 当作自己的 `originID`，
     /// 一旦两边不一致，`apply(_:)` 的 `originID != deviceID` 过滤就会失效 → 同步自激。
     var deviceId: String { deviceID.uuidString }
+    /// App Group 里的设置以本机 deviceID 为来源标记，用于丢弃自己发出的回声。
+    var deviceUUID: UUID { deviceID }
     private let localKey = "morning-mainline.local-snapshot.v2"
     private let deviceID: UUID
     private let connectivity = ConnectivityService()
@@ -35,9 +40,17 @@ final class RoutineStore: ObservableObject {
             snapshot = .initial
         }
 
+        // 先读本机 App Group 里的设置（App 与 Widget 共用同一份），再让 WCSession 覆盖。
+        settings = SharedSettingsStore.current
+
         connectivity.onSnapshot = { [weak self] incoming in self?.apply(incoming) }
-        // 新安装或重新打开任一端时，也要把本机已有进度补发给另一端。
+        connectivity.onSettings = { [weak self] incoming in self?.adoptSettings(incoming) }
+        // 新安装或重新打开任一端时，也要把本机已有进度与设置补发给另一端。
+        // 设置先打上本机来源标记，对方收到后据 `originID` 判断是不是自己的回声。
+        var outgoing = settings
+        outgoing.originID = deviceID
         connectivity.publish(snapshot)
+        connectivity.publish(outgoing)
 
         Task { await ReminderScheduler.shared.requestAuthorization() }
     }
@@ -61,6 +74,30 @@ final class RoutineStore: ObservableObject {
 
     func template(with id: UUID) -> RoutineTemplate? {
         snapshot.templates.first(where: { $0.id == id })
+    }
+
+    // MARK: - 跨设备设置
+
+    /// 写入高德 Key，落本机 App Group 并广播给对端（手表就是靠这一步拿到手机上的 Key）。
+    func setAmapKey(_ value: String) {
+        var next = SharedSettingsStore.updateAmapKey(value)
+        next.originID = deviceID
+        settings = next
+        connectivity.publish(next)
+    }
+
+    /// 记住上次用的出行方式，让两端默认值一致。
+    func setTravelMode(_ mode: TravelMode) {
+        var next = SharedSettingsStore.updateTravelMode(mode)
+        next.originID = deviceID
+        settings = next
+        connectivity.publish(next)
+    }
+
+    /// 采纳对端同步来的设置。丢弃自己的回声，否则两端会互相覆盖。
+    private func adoptSettings(_ incoming: MainlineSettings) {
+        guard SharedSettingsStore.adopt(incoming, localDeviceID: deviceID) else { return }
+        settings = SharedSettingsStore.current
     }
 
     func addTemplate(_ template: RoutineTemplate) {
@@ -501,12 +538,20 @@ final class RoutineStore: ObservableObject {
         )
     }
 
+    /// 两端各自排一份通知。
+    ///
+    /// 原规则 `primaryDevice == deviceRole || deviceRole == .phone` 有两个洞：
+    /// - **iPhone 启动任务线 → 只有 iPhone 排**：手机放家里、人戴着手表时，到点一条提醒都没有。
+    /// - **Watch 启动任务线 → 两端都排但 identifier 完全相同**：iOS 与 watchOS 通知中心互相独立，
+    ///   但同一台手表上「手表 App 排的」与「从手机镜像过来的」会撞成同一条，谁后到谁覆盖。
+    ///
+    /// 现在改为「两端都排 + 各自 identifier 前缀」，并由 `ReminderScheduler` 统一
+    /// `threadIdentifier`，让系统把同一件事的两条折叠成一组而不是并列两条。
     private func rescheduleIfNeeded() {
-        let shouldSchedule = snapshot.activeSession?.primaryDevice == deviceRole || deviceRole == .phone
+        let role = deviceRole
+        let session = snapshot.activeSession
         Task {
-            await ReminderScheduler.shared.replaceNotifications(
-                session: shouldSchedule ? snapshot.activeSession : nil
-            )
+            await ReminderScheduler.shared.replaceNotifications(session: session, role: role)
         }
     }
 }

@@ -48,7 +48,7 @@
               </select>
             </label>
             <label>高德 Web 服务 Key
-              <input v-model="amapKey" type="password" autocomplete="off" class="mm-input" placeholder="当前页面使用，不写入任务数据" />
+              <input v-model="amapKey" type="password" autocomplete="off" class="mm-input" placeholder="保存后会同步到 Apple Watch" />
             </label>
           </details>
           <p class="mm-hint">优先搜索出发地附近的同名地点，定位失败时按名称搜索。选中后显示地图并查询路程。</p>
@@ -214,8 +214,24 @@ const editInstruction = ref('');
 const errorMessage = ref('');
 const hasCommute = ref(false);
 const destination = ref('');
-const travelMode = ref<TravelMode>((localStorage.getItem('mm-travel-mode') as TravelMode) || 'driving');
-const amapKey = ref(import.meta.env.VITE_AMAP_WEB_SERVICE_KEY || '');
+const travelMode = computed<TravelMode>({
+  // 与高德 Key 同源：都走跨设备设置，改一次手机上手表上都生效。
+  // 旧版本只写 localStorage('mm-travel-mode')，那份值现在是死数据，不再读。
+  get: () => (store.settings.travelMode as TravelMode) || 'driving',
+  set: (value: TravelMode) => { void store.saveSettings({ travelMode: value }); },
+});
+/**
+ * 高德 Key 现在有两个来源，优先级从高到低：
+ * 1. store 里的**跨设备设置** —— 这份会经原生写入 App Group 并同步给手表；
+ * 2. `import.meta.env.VITE_AMAP_WEB_SERVICE_KEY` —— 开发期打包注入的兜底。
+ *
+ * 本页填写的 Key 会经 `store.saveSettings` 落进共享设置（而不是只在内存里），
+ * 否则手表上的「一句话创建」永远拿不到 Key。
+ */
+const amapKey = computed<string>({
+  get: () => store.settings.amapKey || (import.meta.env.VITE_AMAP_WEB_SERVICE_KEY as string | undefined) || '',
+  set: (value: string) => { void store.saveSettings({ amapKey: value }); },
+});
 const needsSecureLocation = !window.webkit?.messageHandlers?.mainline && !window.isSecureContext;
 const secureEntryURL = import.meta.env.DEV && import.meta.env.VITE_DEV_HTTPS_URL
   ? `${import.meta.env.VITE_DEV_HTTPS_URL.replace(/\/$/, '')}/${window.location.hash || '#/create'}`
@@ -451,7 +467,6 @@ watch(travelMode, () => {
   routeRequest++;
   routeBusy.value = false;
   routeError.value = '';
-  localStorage.setItem('mm-travel-mode', travelMode.value);
   if (destinationDialog.value) void lookupRoute();
 });
 

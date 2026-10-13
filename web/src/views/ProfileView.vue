@@ -13,6 +13,20 @@
         </div>
       </section>
       <section class="mm-section">
+        <div class="mm-section-heading"><h3>通勤设置</h3><SessionIcon name="route" :size="18" /></div>
+        <label>高德 Web 服务 Key
+          <input v-model="amapKey" type="password" autocomplete="off" class="mm-input" placeholder="粘贴高德开放平台的 Web 服务 Key" />
+        </label>
+        <label>默认出行方式
+          <select v-model="travelMode" class="mm-input">
+            <option value="driving">开车</option>
+            <option value="walking">步行</option>
+            <option value="transit">公交 / 地铁</option>
+          </select>
+        </label>
+        <p class="mm-hint profile-data-note">填一次即可。Key 会同步到 Apple Watch，手表上的「一句话创建」用同一份 Key 搜索地点。</p>
+      </section>
+      <section class="mm-section">
         <div class="mm-section-heading"><h3>账号与数据</h3><SessionIcon name="cloud" :size="18" /></div>
         <div class="profile-data-row"><span>用户名</span><b>{{ account.user?.username }}</b></div>
         <div class="profile-data-row"><span>数据同步</span><b class="profile-sync" :class="{ 'profile-sync--warning': account.status.includes('离线') || account.conflict }">{{ account.status || '正在同步…' }}</b></div>

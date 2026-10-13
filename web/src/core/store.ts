@@ -11,6 +11,7 @@
  */
 
 import type {
+  CommuteInfo,
   DeviceRole,
   RoutineSession,
   RoutineSnapshot,
@@ -381,6 +382,54 @@ export class RoutineStore {
           cursor += 1;
         }
       }
+    }
+
+    this.recalculateExpectedSchedule(session, now);
+    session.revision += 1;
+    session.updatedAt = now;
+    this.commit(now);
+  }
+
+  // ---- §3.8b 写回重算后的通勤路线（web 扩展） ----
+
+  /**
+   * 批量写回通勤路线，与 `reorderPendingTasks` 配对使用：前者改顺序，本方法改该顺序
+   * 对应的路线与时长（排序后每段通勤的出发地要按新前驱重算，见 `destinationGroups`）。
+   *
+   * 只对 `pending` / `suspended` 项生效 —— `active`（已在路上）与 `completed` 不追溯改写，
+   * 否则会出现「已经开出去了、里程突然变长」。该口径必须与视图层预览用的
+   * `destinationGroups.withDraftRoute` 保持一致，否则预览与实际结果对不上。
+   *
+   * `duration` 显式传入时优先于 `commute.seconds`，供撤销时精确恢复原时长。
+   * 本方法为 web 端新增，Swift 侧无对应实现（iOS 的排序不重算路线），故不进 LOGIC_PORT_SPEC 的等价性检查。
+   */
+  applyCommuteRoutes(
+    updates: ReadonlyArray<{ progressID: string; commute: CommuteInfo; duration?: number }>,
+    now: Date = this.clock(),
+  ): void {
+    const session = this._snapshot.activeSession;
+    if (!session || updates.length === 0) {
+      return;
+    }
+
+    let changed = false;
+    for (const update of updates) {
+      const item = session.progress.find((entry) => entry.id === update.progressID);
+      if (!item || item.step.role !== 'task') {
+        continue;
+      }
+      if (item.state !== 'pending' && item.state !== 'suspended') {
+        continue;
+      }
+      item.step.commute = { ...update.commute };
+      const seconds = update.duration ?? update.commute.seconds;
+      if (seconds > 0) {
+        item.step.duration = seconds;
+      }
+      changed = true;
+    }
+    if (!changed) {
+      return;
     }
 
     this.recalculateExpectedSchedule(session, now);

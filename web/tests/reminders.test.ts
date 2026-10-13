@@ -7,11 +7,17 @@ import {
   type StepProgress,
 } from '../src/core/types';
 import {
+  COMMUTE_DEPART_TITLE,
   DEADLINE_MILESTONES,
+  COMMUTE_LEAD_SECONDS,
+  TASK_ADVANCE_TITLE,
+  TASK_LEAD_SECONDS,
   activeTaskTitle,
   allReminders,
   deadlineMilestoneReminder,
+  focusedTask,
   planReminders,
+  taskAdvanceBody,
   taskReminder,
 } from '../src/core/reminders';
 
@@ -232,8 +238,9 @@ describe('reminders — allReminders / planReminders（Swift 29-113）', () => {
 
   it('非 running 会话（completed / cancelled）→ []（即便有未完成 task + deadline）', () => {
     const { session, taskA, taskB, deadlineProgress } = buildTaskSession();
-    // 同样的 progress，仅切换 state：running 有 10 条，非 running 必须为 []。
-    expect(allReminders(session)).toHaveLength(10);
+    // 同样的 progress，仅切换 state：running 有 9 条（1 条当前任务 + 8 里程碑），
+    // 非 running 必须为 []。
+    expect(allReminders(session)).toHaveLength(9);
     const progress = [taskA, taskB, deadlineProgress];
     expect(
       allReminders(sessionWith({ state: 'completed', targetDeadline: deadlineAt, progress })),
@@ -243,11 +250,12 @@ describe('reminders — allReminders / planReminders（Swift 29-113）', () => {
     ).toEqual([]);
   });
 
-  it('targetDeadline=null → 无里程碑，但保留 task 提醒', () => {
+  it('targetDeadline=null → 无里程碑，但保留当前任务提醒', () => {
     const { session } = buildTaskSession();
     session.targetDeadline = null;
     const messages = allReminders(session);
-    expect(messages.map((m) => m.key)).toEqual(['task:P-1:due', 'task:P-2:due']);
+    // 无 active → 回落「第一个未完成 task」= P-1（不是 P-2，也不是两条都出）。
+    expect(messages.map((m) => m.key)).toEqual(['task:P-1:due']);
   });
 
   it('有 targetDeadline 但无未完成的 task/deadline 项 → 无里程碑', () => {
@@ -261,14 +269,14 @@ describe('reminders — allReminders / planReminders（Swift 29-113）', () => {
     expect(allReminders(session)).toEqual([]);
   });
 
-  it('allReminders 顺序：task 按 session.progress 顺序在前，8 个里程碑按表序在后', () => {
+  it('allReminders 顺序：当前任务一条在前，8 个里程碑按表序在后', () => {
     const { session } = buildTaskSession();
     const messages = allReminders(session);
-    expect(messages).toHaveLength(10);
-    expect(messages.slice(0, 2).map((m) => m.key)).toEqual(['task:P-1:due', 'task:P-2:due']);
-    expect(messages.slice(2).map((m) => m.minuteOffset)).toEqual([-10, -5, -3, -1, 0, 2, 4, 6]);
-    expect(messages.slice(2).every((m) => m.level === 'timeSensitive')).toBe(true);
-    expect(messages.slice(2).every((m) => m.progressID === null)).toBe(true);
+    expect(messages).toHaveLength(9);
+    expect(messages.slice(0, 1).map((m) => m.key)).toEqual(['task:P-1:due']);
+    expect(messages.slice(1).map((m) => m.minuteOffset)).toEqual([-10, -5, -3, -1, 0, 2, 4, 6]);
+    expect(messages.slice(1).every((m) => m.level === 'timeSensitive')).toBe(true);
+    expect(messages.slice(1).every((m) => m.progressID === null)).toBe(true);
   });
 
   it('里程碑 fireAt = targetDeadline + offset*60 秒', () => {
@@ -279,12 +287,12 @@ describe('reminders — allReminders / planReminders（Swift 29-113）', () => {
     }
   });
 
-  it('planReminders：now = deadline-6min → 只保留 -5,-3,-1,0,2,4,6 与未过期 task', () => {
+  it('planReminders：now = deadline-6min → 只保留 -5,-3,-1,0,2,4,6 与未过期的当前任务', () => {
     const { session } = buildTaskSession();
     const now = new Date(deadlineAt.getTime() - 6 * 60 * 1000); // 08:04
     const planned = planReminders(session, now);
     expect(planned.map((m) => m.key)).toEqual([
-      'task:P-1:due', // 08:10 > 08:04 → 保留
+      'task:P-1:due', // 08:10 > 08:04 → 保留（P-1 是「第一个未完成 task」= 当前项）
       `deadline:${SESSION_ID}:-5`,
       `deadline:${SESSION_ID}:-3`,
       `deadline:${SESSION_ID}:-1`,
@@ -293,8 +301,17 @@ describe('reminders — allReminders / planReminders（Swift 29-113）', () => {
       `deadline:${SESSION_ID}:4`,
       `deadline:${SESSION_ID}:6`,
     ]);
-    // task P-2（08:00 < 08:04）被时间过滤掉。
+    // P-2 不是当前项，即便它未被时间过滤也不该出现。
     expect(planned.some((m) => m.key === 'task:P-2:due')).toBe(false);
+  });
+
+  it('planReminders：当前项已过期（fireAt <= now）时不保留它，只留里程碑', () => {
+    // now = deadline-5min；P-1 的 dueAt = deadline（08:10）仍 > now，故仍在。
+    // 这里改用 deadline+1min 作 now，让当前项彻底过期。
+    const { session } = buildTaskSession();
+    const now = new Date(deadlineAt.getTime() + 60 * 1000);
+    const planned = planReminders(session, now);
+    expect(planned.some((m) => m.progressID !== null)).toBe(false);
   });
 
   it('planReminders：fireAt === now 不保留（严格 > now）', () => {
@@ -315,6 +332,74 @@ describe('reminders — allReminders / planReminders（Swift 29-113）', () => {
     session.activeProgressID = 'P-1';
     const milestoneZero = allReminders(session).find((m) => m.minuteOffset === 0)!;
     expect(milestoneZero.body).toBe('当前任务“刷牙”还没完成，请先回到主线。');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 4b) Bug 回归：只提醒「当前那一项」（2026-10-14）
+// ---------------------------------------------------------------------------
+
+describe('reminders — 只提醒当前那一项（Bug：上一项未结束却弹下一项）', () => {
+  const deadlineAt = new Date(2026, 7, 13, 8, 10, 0, 0);
+
+  function twoTasks(): { session: RoutineSession; first: StepProgress; second: StepProgress } {
+    const first = createProgress({
+      id: 'P-1',
+      step: createStep({ title: '刷牙', prompt: '先刷牙', duration: 300 }),
+      dueAt: new Date(deadlineAt.getTime() - 20 * 60 * 1000),
+    });
+    const second = createProgress({
+      id: 'P-2',
+      step: createStep({ title: '洗脸', prompt: '再洗脸', duration: 300 }),
+      dueAt: new Date(deadlineAt.getTime() - 10 * 60 * 1000), // 已到点
+    });
+    return {
+      session: sessionWith({ targetDeadline: deadlineAt, progress: [first, second] }),
+      first,
+      second,
+    };
+  }
+
+  it('focusedTask：有 active 时返回 active（哪怕后面还有未完成项）', () => {
+    const { session } = twoTasks();
+    session.progress[0].state = 'active';
+    session.activeProgressID = 'P-1';
+    expect(focusedTask(session)?.id).toBe('P-1');
+  });
+
+  it('focusedTask：无 active 时回落第一个未完成 task', () => {
+    const { session } = twoTasks();
+    expect(focusedTask(session)?.id).toBe('P-1');
+  });
+
+  it('focusedTask：无 active、首项已完成 → 回落下一个未完成 task', () => {
+    const { session } = twoTasks();
+    session.progress[0].state = 'completed';
+    expect(focusedTask(session)?.id).toBe('P-2');
+  });
+
+  it('focusedTask：deadline 项不算候选（它是终点，不是「现在做这个」）', () => {
+    const only = createProgress({
+      id: 'P-D',
+      step: createStep({ title: '出门', duration: 0, role: 'deadline' }),
+      dueAt: deadlineAt,
+    });
+    const session = sessionWith({ targetDeadline: deadlineAt, progress: [only] });
+    expect(focusedTask(session)).toBeNull();
+  });
+
+  it('🔴 回归：下一项已到点，但提醒仍只指向当前项', () => {
+    const { session, second } = twoTasks();
+    session.progress[0].state = 'active';
+    session.activeProgressID = 'P-1';
+    // 下一项确实已到点（正是当初会误弹的场景）。
+    expect(second.dueAt.getTime()).toBeLessThan(deadlineAt.getTime());
+
+    const taskKeys = allReminders(session)
+      .filter((m) => m.progressID !== null)
+      .map((m) => m.key);
+    expect(taskKeys).toEqual(['task:P-1:due']);
+    expect(taskKeys).not.toContain('task:P-2:due');
   });
 });
 
@@ -349,5 +434,45 @@ describe('reminders — activeTaskTitle（Swift 75-77）', () => {
     expect(activeTaskTitle(session)).toBeNull();
     session.activeProgressID = null;
     expect(activeTaskTitle(session)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 6) 系统通道专用文案锚点（2026-10-13 新增）
+// ---------------------------------------------------------------------------
+
+describe('reminders — 系统通道专用文案（Swift ReminderScheduler）', () => {
+  /**
+   * 这两类提醒**刻意不产出 ReminderMessage** —— 它们只在「人没在看屏幕」时才有意义，
+   * 真正的排期由原生 `ReminderScheduler` 做。这里断言的是**文案常量本身**，
+   * 目的是在 Swift 侧改字（哪怕只是全角/半角引号、`·` 间距）时把漂移抓出来。
+   */
+  it('提前预警文案逐字对应 Swift scheduleTask', () => {
+    expect(TASK_ADVANCE_TITLE).toBe('不跑偏 · 还有 2 分钟');
+    expect(taskAdvanceBody('刷牙')).toBe('接下来：刷牙');
+  });
+
+  it('通勤出发文案逐字对应 Swift scheduleCommuteDepart', () => {
+    expect(COMMUTE_DEPART_TITLE).toBe('不跑偏 · 该出发了');
+  });
+
+  it('提前量与 Swift 常量一致（各 2 分钟）', () => {
+    expect(TASK_LEAD_SECONDS).toBe(120);
+    expect(COMMUTE_LEAD_SECONDS).toBe(120);
+  });
+
+  it('buildReminders 不产出这两类（页内弹窗不该出现提前预警）', () => {
+    const progress = createProgress({
+      id: 'P-ANCHOR',
+      step: createStep({ title: '刷牙', duration: 60 }),
+      dueAt: new Date(2026, 7, 13, 8, 10, 0, 0),
+    });
+    const session = sessionWith({
+      targetDeadline: new Date(2026, 7, 13, 8, 10, 0, 0),
+      progress: [progress],
+    });
+    const titles = allReminders(session).map((m) => m.title);
+    expect(titles).not.toContain(TASK_ADVANCE_TITLE);
+    expect(titles).not.toContain(COMMUTE_DEPART_TITLE);
   });
 });

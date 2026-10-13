@@ -101,18 +101,37 @@ struct WebHost: UIViewControllerRepresentable {
 final class WebHostController: UIViewController {
     let webView: WKWebView
 
-    init() {
+    /// WebView 配置的**单一来源**，两条构造路径共用。
+    ///
+    /// 桥通过 `window.webkit.messageHandlers.mainline` 通信，handler 在 `Coordinator.attach(to:)` 里注册。
+    private static func makeConfiguration() -> WKWebViewConfiguration {
         let configuration = WKWebViewConfiguration()
-        // 桥通过 `window.webkit.messageHandlers.mainline` 通信，注册在 Coordinator.attach(to:)。
         configuration.userContentController = WKUserContentController()
         configuration.allowsInlineMediaPlayback = true
-        self.webView = WKWebView(frame: .zero, configuration: configuration)
+        return configuration
+    }
+
+    init() {
+        self.webView = WKWebView(frame: .zero, configuration: Self.makeConfiguration())
         super.init(nibName: nil, bundle: nil)
     }
 
-    @available(*, unavailable)
+    /// ⚠️ 这里**曾经是** `fatalError("init(coder:) 未实现")`（配 `@available(*, unavailable)`）。
+    ///
+    /// 那是全仓**唯一一处「一旦被调用必定崩溃」**的点，而它偏偏只在**真机**路径上会被踩到：
+    /// - 模拟器永远经 `WebHost.makeUIViewController` → `WebHostController()` → `init()`，
+    ///   碰不到这个方法，所以「模拟器跑得好好的」；
+    /// - 真机上，UIKit 仍可能通过 `init(coder:)` 实例化本控制器 —— `Info.plist` 声明了
+    ///   `UIApplicationSupportsMultipleScenes = true`，于是多窗口 / 场景恢复这类 UIKit 侧
+    ///   构造路径存在被走到的可能。**点系统通知冷启动 App 恰好是最容易触发场景装配的时机**，
+    ///   表现就是用户报的「点通知 App 闪退」。
+    ///
+    /// 现在给出与 `init()` **完全等价**的实现：不读 `coder` 的任何内容（本控制器没有 nib /
+    /// storyboard 依赖），用同一份 `makeConfiguration()` 建 WebView。两条路径殊途同归，
+    /// 无论系统从哪条路进来都不会崩。
     required init?(coder: NSCoder) {
-        fatalError("init(coder:) 未实现")
+        self.webView = WKWebView(frame: .zero, configuration: Self.makeConfiguration())
+        super.init(coder: coder)
     }
 
     override func viewDidLoad() {
@@ -393,6 +412,19 @@ extension WebHost {
                 adoptFromWebView(params["snapshot"])
                 reply(id: id)
 
+            case "settings.read":
+                // 高德 Key 存 App Group 而非快照里 —— 快照会多处落盘，凭据不该跟着业务数据飘。
+                let settings = store.settings
+                reply(id: id, result: ["amapKey": settings.amapKey, "travelMode": settings.travelMode])
+
+            case "settings.write":
+                // 这一步是手表拿到 Key 的唯一路径：写 App Group + 经 WCSession 广播。
+                store.setAmapKey(params["amapKey"] as? String ?? "")
+                if let raw = params["travelMode"] as? String, let mode = TravelMode(rawValue: raw) {
+                    store.setTravelMode(mode)
+                }
+                reply(id: id)
+
             case "notifications.requestAuthorization":
                 // 必须等它完成再回执；`granted` 以随后的系统设置为准（scheduler 不返回结果）。
                 await ReminderScheduler.shared.requestAuthorization()
@@ -401,7 +433,10 @@ extension WebHost {
 
             case "notifications.replace":
                 let session = Self.decodeSession(params["session"])
-                await ReminderScheduler.shared.replaceNotifications(session: session)
+                // `role` 必须用**原生**的 deviceRole，不能用 JS 传来的值：
+                // identifier 前缀要与本机 `RoutineStore.rescheduleIfNeeded` 排出来的完全一致，
+                // 否则同一条会话会被前后缀各排一遍、互相清不掉，变成重复通知。
+                await ReminderScheduler.shared.replaceNotifications(session: session, role: store.deviceRole)
                 reply(id: id)
 
             case "notifications.present":

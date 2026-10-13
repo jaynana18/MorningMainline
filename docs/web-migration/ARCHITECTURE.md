@@ -138,6 +138,10 @@ export interface BridgeCapabilities {
   widget: boolean;                 // WebView=true, browser=false
 }
 
+/** 跨设备共用设置（2026-10-13 新增）。 */
+export interface SharedSettings { amapKey: string; travelMode: string }
+export const EMPTY_SHARED_SETTINGS: SharedSettings;
+
 export interface PlatformBridge {
   readonly host: 'webview' | 'browser';
   readonly capabilities: BridgeCapabilities;
@@ -146,9 +150,16 @@ export interface PlatformBridge {
   readSnapshot(): Promise<RoutineSnapshot | null>;
   writeSnapshot(snapshot: RoutineSnapshot): Promise<void>;
 
+  /** 读取跨设备共用设置（高德 Key / 出行方式）。无能力时返回 EMPTY_SHARED_SETTINGS。 */
+  readSettings(): Promise<SharedSettings>;
+  /** 写入并广播给配对设备（手表靠这一步拿到 Key）。无能力时静默 no-op。 */
+  writeSettings(settings: SharedSettings): Promise<void>;
+
   requestNotificationAuthorization(): Promise<boolean>;
   replaceNotifications(session: RoutineSession | null): Promise<void>;
   presentNotification(payload: { title: string; body: string; level?: 'normal' | 'timeSensitive' }): Promise<void>;
+  /** 告知原生前台页内提醒通道是否已就绪；未就绪时原生保留系统横幅兜底。 */
+  setForegroundReminderReady(ready: boolean): Promise<void>;
 
   /** 云端语义解析。宿主无能力时 resolve(null)，调用方静默回退纯规则。 */
   parseWithModel(input: string): Promise<ParseResult | null>;
@@ -156,6 +167,9 @@ export interface PlatformBridge {
   /** 返回取消订阅函数。 */
   onSnapshotChanged(cb: (snapshot: RoutineSnapshot) => void): () => void;
   onNotificationOpened(cb: (payload: { progressID?: string; sessionID?: string; minuteOffset?: number }) => void): () => void;
+  /** App/页面前后台状态变化（线格式事件名 `app.state`，载荷 `{visible: Bool}`）。
+   *  返回取消订阅函数；订阅时**立即回调当前态**。 */
+  onAppStateChanged(cb: (visible: boolean) => void): () => void;
 }
 
 /** 自动探测宿主并返回对应实现（webview / browser）。 */
@@ -166,6 +180,7 @@ export function createBridge(): PlatformBridge;
 - `platform/mock.ts` 必须提供纯内存实现，供单测与浏览器无持久化场景使用。
 - 浏览器宿主的 `writeSnapshot` 落 `IndexedDB`；`deviceInfo().id` 必须**持久化且稳定**（否则 `originID` 过滤失效 → 同步自激）。
 - 浏览器宿主 `parseWithModel` 在**无后端代理时返回 `null`**，绝不可把 API Key 打进前端产物。
+- **`amapKey` 同属敏感信息且浏览器宿主物理上做不到跨设备共享**：WebView 宿主下写进 App Group 并经 WCSession 广播给手表；浏览器宿主只能落 `localStorage`（仅本页有效，无手表）。这一点必须如实向用户呈现，不可假装同步成功。
 - 桥的调用必须带超时与失败降级：任何原生方法抛错/超时（建议 5s）都不得让 UI 卡死，须回落到 `browser` 语义或返回 `null`。
 
 ### 4b.2 Pinia store 契约（`web/src/stores/routine.ts`）
@@ -197,6 +212,7 @@ complete(p: StepProgress): void
 snoozeCurrent(seconds?: number): void
 addTemporaryTask(title: string, minutes: number, placement: TemporaryTaskPlacement): void
 reorderPendingTasks(ids: string[]): void
+applyCommuteRoutes(updates: { progressID: string; commute: CommuteInfo; duration?: number }[]): void  // web 扩展，见 LOGIC_PORT_SPEC §3.8b
 deleteFromCurrentSession(p: StepProgress): void
 cancel(): void
 finish(): void
@@ -214,6 +230,22 @@ applyIncoming(s: RoutineSnapshot): boolean
 | `views/TemplatePreviewView.vue` | `TaskLinePreviewView` | 倒推计划展示（`BackwardPlanSummary`）、步骤编辑 |
 | `views/SessionView.vue` | `ActiveFocusCard` + `TimelineCard` + `PendingTaskReorderView` + `TemporaryTaskView` + `CompletionResultOverlay` | 当前任务焦点卡、时间线、未完成项重排（拖拽）、临时任务插入（两种 placement）、完成结果浮层、snooze |
 | `views/PlanImpactCard.vue` | `PlanImpactCard` | 延误影响提示 |
+
+**已偏离 Swift 的两处（2026-10-13）**：
+1. **排序不弹窗、不整卡拖**：`PendingTaskReorderView.vue`（弹窗式重排）在 web 端已无引用，
+   连同 `TimelineCard` 的整卡 `pointerdown` 拖动一起，被**内嵌排序面板**取代 ——
+   卡头「调整顺序」主动进入。拖动分两级：
+   - **整组**（组头行最右的 ≡）：拖动单位是按目的地折叠的**目的地组**
+     （`views/session/destinationGroups.ts`），组内恒为「通勤 → 活动」；
+   - **组内先后**（活动行最右的 ≡）：调同一地点内多件事的次序，范围不出本组。
+   两个手柄右对齐成一列，靠尺寸（28 / 22）与样式（虚线框 / 无框淡色）区分层级。
+   松手后先展示影响再点「完成」保存，保存后可「撤销」。
+2. **保存会重算路线**：顺序一变，每段通勤的出发地按新前驱重写（`applyCommuteRoutes`），
+   时长随之更新；Swift 侧无此行为。故 `applyCommuteRoutes` 不进跨端等价性检查。
+
+**组内重排为什么不用改 core**：`DestinationGroupPlan.moveIDs` 恒为 `[通勤, 活动…]` 拼接，
+组内 `activities` 换序即自动反映到提交的 ids；且组的出发地与目的地都没变，
+`replanCommutes` 判定 `changed = false` → 纯本地、零网络请求。
 
 **视图层禁止**：直接 import `core/`（一律经 Pinia store）；直接触碰 `platform/`（一律经 store）。
 

@@ -747,6 +747,44 @@ session.updatedAt = new Date()
 ```
 **遍历方向**：**正序**扫描 progress 的可重排槽位；第 k 个槽位放入 `ids` 第 k 项。active 项位置不动。
 
+### 3.8b `applyCommuteRoutes(updates, now=new Date())` —— **web 扩展，Swift 无对应实现**
+
+iOS 的排序只改顺序、不重算路线；web 端把「先到哪里做什么」当成拖动单位，
+顺序一变，每段通勤的出发地（`commute.origin`）就得按新前驱重写，故新增本方法。
+**不要**把它加进与 Swift 的等价性检查 —— 它是对等接口之外的能力。
+
+**入参**：`updates: { progressID, commute, duration? }[]`。
+**前置 guard**：`session != null && updates 非空`。
+```
+changed = false
+for update in updates:
+    item = progress.find(id == update.progressID)
+    if item == null || item.step.role != "task": continue
+    if item.state not in ["pending","suspended"]: continue      // active/completed 不追溯
+    item.step.commute = update.commute
+    seconds = update.duration ?? update.commute.seconds
+    if seconds > 0: item.step.duration = seconds
+    changed = true
+if !changed: return                                            // 全被跳过 ⇒ 不 commit
+recalculateExpectedSchedule(session, now)
+session.revision += 1
+session.updatedAt = now
+commit(now)
+```
+
+**两条不变量**：
+1. **只改 `pending` / `suspended`**：active（已在路上）与 completed 不追溯改里程，否则会出现
+   「已经开出去了、时长突然变长」。视图层的预览函数 `applyDraftOrder` 必须用同一口径，
+   否则「调整后预计」与保存后的真实排程对不上。
+2. **`duration` 显式优先**：撤销时用它精确恢复原时长（`commute.seconds` 未必等于当时的 `step.duration`）。
+
+**调用约定**：与 `reorderPendingTasks` 成对调用（先顺序、后路线）。顺序变更会立刻重算 `dueAt`，
+若路线晚一步写完，用户会先看到一段基于**旧出发地**的错误排程。
+
+**什么时候不用调**：调整**目的地组内**活动的先后（同一地点内先做哪件事）**不需要**调用本方法 ——
+组的目的地与出发地都没变，每段通勤的 `origin` 推导结果不变。这种调整只是换一下
+`reorderPendingTasks` 的传入顺序，零网络请求。
+
 ### 3.9 `deleteFromCurrentSession(progress, now=new Date())`
 **前置 guard**：`session!=null && progress.step.role=="task" && progress 有 index`。
 ```
@@ -911,19 +949,39 @@ function apply(incoming, current, selfDeviceID) {
 ### 5.1 本地通知调度 — `ReminderScheduler`（`UNUserNotificationCenter`）
 - **现在负责什么**：
   - 启动时 `requestAuthorization([.alert,.sound,.badge])`。
-  - `replaceNotifications(session:)`：先删所有前缀 `morning-mainline-` 的待发通知，再为 `state=="running"` 会话重建：
-    - 每个 incomplete 的 **task** 步在其 `dueAt > now` 时各排一条（identifier `morning-mainline-{sessionID}-{progressID}-due`），标题 `不跑偏 · {标题}`，正文 `prompt`，`categoryIdentifier=MORNING_MAINLINE_STEP`，`userInfo.progressID`。
+  - `replaceNotifications(session:role:)`（**2026-10-13 签名变更**，新增 `role`）：先删本机所有前缀 `morning-mainline-` 的待发通知，再为 `state=="running"` 会话重建：
+    - 每个 incomplete 的 **普通 task** 步各排**两条**：提前 `taskLead`(2 分钟) 一条（identifier `...-{progressID}-advance`，标题 `不跑偏 · 还有 2 分钟`，正文 `接下来：{标题}`），`dueAt` 一条（identifier `...-{progressID}-due`，标题 `不跑偏 · {标题}`，正文 `prompt`）。
+    - **通勤步**（`commute != nil || title 以「通勤到」开头`）不排上面两条，改排一条出发提醒（identifier `...-{progressID}-depart`，标题 `不跑偏 · 该出发了`，正文为步骤标题）。触发点 = `dueAt − remainingWork − min(commuteLead, remainingWork/2)`，即「离开时刻再往前挪一点，且提前量不超过路程一半」。
     - 只有整条计划最终 `targetDeadline` 使用**密集提醒**，共 8 个里程碑：−10/−5/−3/−1/0/+2/+4/+6 分钟（identifier `...-deadline-milestone-{offset}`），`interruptionLevel=.timeSensitive`；0 及正偏移用自定义音 `deadline-overdue.aiff`（watchOS 用系统音）。文案随偏移变化（见源码 60–93 行）。
+    - 三条通道使用**不同的 threadIdentifier**（task 按 progressID、commute 按 progressID、milestone 固定 `morning-mainline-deadline`），让系统折叠同源通知。
+  - **identifier 前缀隔离**：`morning-mainline-phone` / `-pad` / `-watch`。iOS 与 watchOS 通知中心彼此独立、**两端各自排一份**（手机不在身边时手表仍能提醒）；前缀不同避免同一台设备上互相覆盖，threadIdentifier 相同让系统折叠成一组。
+  - **清理按公共根前缀 `morning-mainline-` 扫**，不按本设备前缀 —— 否则升级前装的通知会留成幽灵提醒。
 - **Web 替代必须满足**：
   - 具备「即使页面关闭也能按时触发」的能力 → 只能用 Service Worker + `Notification` / Push（Web Push + 后端调度），或用原生壳（如 Capacitor/Tauri）桥接系统通知，否则只能做到「页面在前台时提醒」。
   - 需要用户授权、需要「先清后建」的幂等重建（同一 identifier 覆盖语义）。
-  - 需支持 **8 个 deadline 里程碑 + 每 task 一条** 的排期，并复刻 `dueAt > now` 过滤与文案（含中文毫秒/分钟偏移）。
+  - 需支持 **8 个 deadline 里程碑 + 每 task 两条（预警/到点）+ 每通勤一条** 的排期，并复刻 `dueAt > now` 过滤与文案（含中文毫秒/分钟偏移）。
   - `timeSensitive`、自定义音、后台唤醒在标准 Web 平台**不可保证**，属降级项。
+  - ⚠️ **提前预警与通勤出发提醒不进页内弹窗**：`web/src/core/reminders.ts` 的 `buildReminders` 只产出「task 到点 + 8 个里程碑」两类，因为页内弹窗只在用户盯着屏幕时出现，提前提醒在那里是噪音。两类新提醒的价值在屏幕没亮时，属系统通知通道职责。但**文案仍在该文件里以常量形式锚定**（`TASK_ADVANCE_TITLE` / `COMMUTE_DEPART_TITLE` / `taskAdvanceBody`），改 Swift 文案必须同步，否则测试会红。
+
+### 5.1b 高德通勤查询 — `CommuteService` / `LocationProvider`（`URLSession` / `CoreLocation`）
+- **现在负责什么**（2026-10-13 新增，Watch 与 iPhone 共用）：
+  - `CommuteService.queryCommute(key:address:mode:selectedDestination:originLocation:)`：走高德 **Web 服务 REST**（非 SDK）。候选策略三段式：`place/around`（出发地 10km 内）→ `place/text`（按城市按名搜）→ `place/around`（附近 3km 兜底，并标记 `usedNearbyFallback` 以改写提示文案）。搜到多个候选时抛 `.selectionRequired(candidates, message)`，由 UI 抉择后带 `selectedDestination` 重试（此时跳过选点、直接按坐标算路）。
+  - 出发地三级回落：显式传入 → 60 秒内存缓存（**不落盘**）→ 现场定位。定位拿到的 GPS 坐标须经 `assistant/coordinate/convert`（`coordsys=gps`）转 GCJ-02。
+  - 算路：`direction/driving|walking|transit`；公交走 `direction/transit/integrated` 并需 `city`/`cityd`。多方案按 `duration` 升序取最快；`seconds` 向上取整到整分钟。`polyline` 递归收集（`buslines` 只取首段）、抽样至 60 点、保留首尾。
+  - **刻意不生成地图 URL**：Watch 不展示地图，静态地图接口对其无意义。
+- **为什么用 REST 而不是官方 SDK**：高德 iOS SDK（AMapSearchKit / AMapFoundation）**不支持 watchOS**；REST 是纯 HTTP GET，watchOS 的 `URLSession` 直接可用。
+- **Web 替代必须满足**：浏览器端已有等价实现（`web/src/platform/commute.ts`），两端行为须一致；差异只有一处 —— 浏览器宿主**不得持有 API Key**（物理边界，见 ARCHITECTURE），须走后端代理，无代理则降级纯规则并明示。
 
 ### 5.2 手表同步 — `ConnectivityService`（`WCSession` / WatchConnectivity）
-- **现在负责什么**：iOS ↔ watchOS 双向同步 `RoutineSnapshot`。编码为 JSON `Data` 放在 `payload["snapshot"]`，通过 `updateApplicationContext`（最新态）+ `sendMessage`（可达时即时）/ `transferUserInfo`（兜底队列）发送；收到后 `decode` 并回调 `onSnapshot`。不可用时为 no-op 空实现。
+- **现在负责什么**：iOS ↔ watchOS 双向同步。承载两类载荷：
+  - `payload["snapshot"]`：`RoutineSnapshot`（原有）。
+  - `payload["settings"]`：`MainlineSettings`（**2026-10-13 新增**），含高德 Web 服务 Key、出行方式、来源设备 id。
+  通过 `updateApplicationContext`（最新态）+ `sendMessage`（可达时即时）/ `transferUserInfo`（兜底队列）发送；收到后 `decode` 并分别回调 `onSnapshot` / `onSettings`。不可用时为 no-op 空实现。
+- **⚠️ 发送必须把两类载荷一起带上**：`updateApplicationContext` 是**整字典替换**，各自单独发会把对方从本机 context 里抹掉；故内部累计 `latestSnapshot` / `latestSettings` 拼装完整 payload。这是本次改造最容易踩的坑。
+- **⚠️ App Group 不能跨设备**：`group.com.jaynana.MorningMainline` 只解决**同一设备内 App ↔ 扩展**共享（iPhone App ↔ iOS Widget、Watch App ↔ 表盘复杂功能）。iPhone 与 Watch 是两个独立容器，即便标识符相同也读不到对方数据。**高德 Key 的同步路径必须是**：iPhone 写入本机 App Group → 经 WCSession 送到手表 → 手表写入自己设备上的 App Group（见 `SharedSettingsStore`）。
+- **回声抑制**：`MainlineSettings.originID` 记录写入设备；`SharedSettingsStore.adopt` 丢弃 `originID == 本机 deviceID` 的载荷，否则两端会把对方的旧值再发回去、来回覆盖。
 - **Web 替代必须满足**：
-  - 因为「Watch 端保留原生 Swift 不动」，Web 端要同步就得与 **iPhone 原生**互通，需新增一条 iOS↔Web 通道（如 iCloud KV / 自建 HTTP / WebSocket），且必须复用 §0 的序列化契约（Date 参考秒、UUID 大小写）。
+  - 因「Watch 端保留原生 Swift 不动」，Web 端要同步就得与 **iPhone 原生**互通，需新增一条 iOS↔Web 通道（如 iCloud KV / 自建 HTTP / WebSocket），且必须复用 §0 的序列化契约（Date 参考秒、UUID 大小写）。
   - 需保证「最新态覆盖」（`updateApplicationContext` 语义）+「可靠补发」（`transferUserInfo` 语义）两种传输语义都有对应（如 WebSocket 实时 + 重连后全量拉取）。
   - 冲突解决仍走 §4 的 originID/revision/updatedAt 裁决；`pendingIncoming/Outgoing` 的「回调未就绪时缓存」也要保留。
 

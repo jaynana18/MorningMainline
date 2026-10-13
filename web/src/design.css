@@ -76,8 +76,6 @@ details summary { color: #7b8ba2; cursor: pointer; font-size: 12px; }
 .mm-line-settings { border-color: var(--mm-border); }
 .mm-alert-modes button { background: #f8fafd; border-color: var(--mm-border); border-radius: 12px; padding: 12px; }
 .mm-alert-modes button.active { border-color: #bfd5f6; background: var(--mm-primary-soft); }
-.mm-simulator { background: #f5f7fb; border-radius: 12px; padding: 10px; flex-wrap: wrap; }
-.mm-simulator input, .mm-simulator button { border-color: var(--mm-border); }
 .mm-current-dock { border-color: var(--mm-border); background: #ffffffef; box-shadow: 0 8px 32px #24334b12; border-radius: 20px; }
 .mm-line-status { border-radius: 12px; padding: 11px 14px; }
 .mm-drag-hint { color: #a1adbe; font-size: 11px; text-align: center; }
