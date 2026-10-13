@@ -1,4 +1,5 @@
 import type { CommuteInfo } from '../core/types';
+import { nativeRequest } from './webview';
 export type TravelMode = 'driving' | 'walking' | 'transit';
 export type CommuteRoute = CommuteInfo;
 export class OriginRequired extends Error {}
@@ -58,17 +59,18 @@ export async function queryCommute(key: string, address: string, mode: TravelMod
   if (!origin && cachedOrigin && Date.now() - cachedOrigin.time < 60000) origin = cachedOrigin.location;
   if (!origin) {
     try {
-    if (!window.isSecureContext || !navigator.geolocation) throw new OriginRequired('无法自动定位，请按名称选择出发地。');
-    const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+    const isNative = !!window.webkit?.messageHandlers?.mainline;
+    if (!isNative && (!window.isSecureContext || !navigator.geolocation)) throw new OriginRequired('无法自动定位，请按名称选择出发地。');
+    const coords = isNative ? await nativeRequest('location.current') as { longitude: number; latitude: number } : (await new Promise<GeolocationPosition>((resolve, reject) => {
       navigator.geolocation.getCurrentPosition(resolve, () => reject(new OriginRequired('没有获取到当前位置，请按名称选择出发地。')), { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
-    });
-    const gps = `${position.coords.longitude.toFixed(6)},${position.coords.latitude.toFixed(6)}`;
+    })).coords;
+    const gps = `${coords.longitude.toFixed(6)},${coords.latitude.toFixed(6)}`;
     const converted = await request('assistant/coordinate/convert', { locations: gps, coordsys: 'gps' });
     origin = converted.locations as string;
     cachedOrigin = { location: origin, time: Date.now() };
     } catch (error) {
       // 搜地点可在定位失败后继续；真正算路程仍必须有出发地。
-      if (selectedDestination) throw error;
+      if (selectedDestination) throw error instanceof OriginRequired ? error : new OriginRequired('无法获取当前位置，请按名称选择出发地。');
     }
   }
   const start = origin ? await request('geocode/regeo', { location: origin }).catch(() => null) : null;

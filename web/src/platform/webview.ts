@@ -32,6 +32,11 @@ export const BRIDGE_TIMEOUT_MS = 5000;
 /** 订阅者未就绪时暂存的「通知点击」事件上限。与原生 `WebHost.pendingEvents` 的 32 条上限对称。
  *  超出时丢最旧：最新的一次点击才代表用户当下的意图。 */
 const MAX_PENDING_NOTIFICATION_EVENTS = 64;
+let nativeBridge: WebViewBridge | null = null;
+export function nativeRequest(method: string, params: Record<string, unknown> = {}, timeout = 25000): Promise<unknown> {
+  if (!nativeBridge) return Promise.reject(new Error('原生连接尚未就绪'));
+  return nativeBridge.request(method, params, timeout);
+}
 
 interface WebKitMessageHandler {
   postMessage(message: unknown): void;
@@ -108,6 +113,7 @@ export class WebViewBridge implements PlatformBridge {
   private readonly appStateListeners = new Set<(visible: boolean) => void>();
 
   constructor() {
+    nativeBridge = this;
     this.install();
   }
 
@@ -181,7 +187,7 @@ export class WebViewBridge implements PlatformBridge {
   }
 
   /** 发消息并等待同 id 回执；超时或抛错都 reject（由公开方法统一降级）。 */
-  private call(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
+  request(method: string, params: Record<string, unknown> = {}, timeout = BRIDGE_TIMEOUT_MS): Promise<unknown> {
     return new Promise<unknown>((resolve, reject) => {
       const handler =
         typeof window !== 'undefined' ? window.webkit?.messageHandlers?.mainline : undefined;
@@ -194,7 +200,7 @@ export class WebViewBridge implements PlatformBridge {
       const timer = setTimeout(() => {
         this.pending.delete(id);
         reject(new Error(`原生桥调用超时：${method}`));
-      }, BRIDGE_TIMEOUT_MS);
+      }, timeout);
 
       this.pending.set(id, {
         resolve,
@@ -210,6 +216,10 @@ export class WebViewBridge implements PlatformBridge {
         reject(error instanceof Error ? error : new Error(String(error)));
       }
     });
+  }
+
+  private call(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
+    return this.request(method, params);
   }
 
   private warn(method: string, error: unknown): void {
@@ -288,7 +298,7 @@ export class WebViewBridge implements PlatformBridge {
 
   async parseWithModel(input: string): Promise<ParseResult | null> {
     try {
-      const result = await this.call('parse.withModel', { input });
+      const result = await this.request('parse.withModel', { input }, 65000);
       return decodeParseResultWire(result);
     } catch (error) {
       this.warn('parse.withModel', error);

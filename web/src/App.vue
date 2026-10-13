@@ -1,18 +1,35 @@
 <template>
-  <div class="app-shell">
+  <div class="app-shell" :class="{ 'app-shell--navigation': account.user }">
     <p v-if="!account.ready" class="mm-hint" style="padding: 24px">正在连接账号…</p>
     <AccountView v-else-if="!account.user" />
     <template v-else>
-      <div class="mm-row" style="padding: 8px 16px; font-size: 12px">
-        <span>{{ account.user.username }} · {{ account.status || '正在同步…' }}</span>
-        <button class="mm-btn mm-btn--secondary" @click="logout">退出账号</button>
-      </div>
       <div v-if="account.conflict" class="mm-section">
         <p>另一台设备有新数据。本机改动已保留，请选择此次保留哪一份：</p>
         <button class="mm-btn mm-btn--secondary" @click="resolveConflict('cloud')">使用服务器数据</button>
         <button class="mm-btn mm-btn--secondary" @click="resolveConflict('local')">用本机数据替换服务器</button>
       </div>
       <router-view />
+      <nav class="app-bottom-bar" aria-label="底部导航">
+        <button class="app-bottom-tab" :class="{ active: route.name !== 'profile' }" :aria-current="route.name !== 'profile' ? 'page' : undefined" @click="router.push('/')">
+          <SessionIcon name="clock" :size="25" /><span>任务</span>
+        </button>
+        <button class="app-create-button" aria-label="一句话创建" @click="router.push('/create')"><SessionIcon name="plus" :size="34" /></button>
+        <button class="app-bottom-tab" :class="{ active: route.name === 'profile' }" :aria-current="route.name === 'profile' ? 'page' : undefined" @click="router.push('/profile')">
+          <SessionIcon name="person" :size="25" /><span>个人中心</span>
+        </button>
+      </nav>
+      <router-view name="drawer" v-slot="{ Component }">
+        <Teleport to="body">
+          <Transition name="create-drawer">
+            <div v-if="Component" class="create-drawer-backdrop" @click.self="router.push('/')" @keydown.esc.stop="router.push('/')">
+              <section class="create-drawer-panel" role="dialog" aria-modal="true" aria-label="一句话创建">
+                <div class="create-drawer-handle" aria-hidden="true"></div>
+                <component :is="Component" />
+              </section>
+            </div>
+          </Transition>
+        </Teleport>
+      </router-view>
     </template>
 
     <!--
@@ -37,32 +54,31 @@
 
 <script setup lang="ts">
 import { onMounted, onUnmounted, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { useRoutineStore } from './stores/routine';
 import { useRemindersStore } from './stores/reminders';
 import ReminderOverlay from './views/reminder/ReminderOverlay.vue';
 import { resolveFocusAction } from './views/reminder/helpers';
 import AccountView from './views/AccountView.vue';
-import { account, accountRequest, loadAccount } from './platform/account';
+import { account, loadAccount } from './platform/account';
+import SessionIcon from './views/session/SessionIcon.vue';
 
 const store = useRoutineStore();
 const reminders = useRemindersStore();
 const router = useRouter();
+const route = useRoute();
 
 onMounted(async () => {
   await loadAccount();
   if (account.user) { await store.init(); void reminders.start(); }
 });
 function resolveConflict(choice: string): void { window.dispatchEvent(new CustomEvent('mm-resolve-sync', { detail: choice })); }
-async function logout(): Promise<void> {
-  try {
-    await accountRequest('/logout', 'POST', {});
-    localStorage.removeItem('mm-account-user');
-    window.location.reload();
-  } catch { account.status = '退出失败，请连接网络后重试'; }
-}
+watch(() => !!account.user && route.name === 'create', open => {
+  document.body.style.overflow = open ? 'hidden' : '';
+}, { immediate: true });
 
 onUnmounted(() => {
+  document.body.style.overflow = '';
   reminders.stop();
 });
 
@@ -96,3 +112,22 @@ watch(
   { immediate: true },
 );
 </script>
+
+<style>
+.app-shell--navigation { padding-bottom: calc(98px + env(safe-area-inset-bottom)); }
+.app-bottom-bar { position: fixed; z-index: 30; bottom: 0; left: 0; right: 0; display: grid; grid-template-columns: 1fr 100px 1fr; align-items: center; min-height: 72px; padding: 8px 16px calc(8px + env(safe-area-inset-bottom)); background: #fffffff5; border-top: 1px solid #f0f1f4; backdrop-filter: blur(16px); }
+.app-bottom-tab { display: flex; align-items: center; flex-direction: column; gap: 5px; border: 0; background: none; color: #aaa; cursor: pointer; font-size: 11px; }
+.app-bottom-tab.active { color: #409df2; }
+.app-create-button { justify-self: center; display: grid; place-items: center; width: 68px; height: 68px; margin-top: -36px; border: 0; border-radius: 23px; background: #409df2; color: #fff; box-shadow: 0 8px 24px #409df23d; cursor: pointer; }
+.app-shell--navigation .mm-current-dock { bottom: calc(92px + env(safe-area-inset-bottom)); }
+.app-shell--navigation .mm-taskline-screen { padding-bottom: 90px; }
+.create-drawer-backdrop { position: fixed; inset: 0; z-index: 50; display: flex; align-items: flex-end; justify-content: center; background: #17222d66; }
+.create-drawer-panel { width: 100%; max-width: 800px; max-height: 92dvh; overflow-y: auto; overscroll-behavior: contain; border-radius: 26px 26px 0 0; background: var(--mm-canvas); padding-bottom: env(safe-area-inset-bottom); }
+.create-drawer-handle { width: 44px; height: 5px; margin: 10px auto 5px; border-radius: 8px; background: #bfc4c9; }
+.create-drawer-panel .mm-toolbar { border-bottom-width: 1px; }
+.create-drawer-enter-active, .create-drawer-leave-active { transition: opacity .25s ease; }
+.create-drawer-enter-active .create-drawer-panel, .create-drawer-leave-active .create-drawer-panel { transition: transform .25s ease; }
+.create-drawer-enter-from, .create-drawer-leave-to { opacity: 0; }
+.create-drawer-enter-from .create-drawer-panel, .create-drawer-leave-to .create-drawer-panel { transform: translateY(100%); }
+@media (prefers-reduced-motion: reduce) { .create-drawer-enter-active, .create-drawer-leave-active, .create-drawer-enter-active .create-drawer-panel, .create-drawer-leave-active .create-drawer-panel { transition: none; } }
+</style>

@@ -3,6 +3,68 @@ import SwiftUI
 import UIKit
 import UserNotifications
 import WebKit
+import CoreLocation
+
+/// 仅在用户查询路线时请求一次定位，结束后停止。
+@MainActor
+private final class MainlineLocationProvider: NSObject, CLLocationManagerDelegate {
+    private let manager = CLLocationManager()
+    private var continuation: CheckedContinuation<[String: Double], Error>?
+    private var timeout: Task<Void, Never>?
+
+    override init() {
+        super.init()
+        manager.delegate = self
+        manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
+    }
+
+    func current() async throws -> [String: Double] {
+        guard continuation == nil else { throw failure("正在获取位置，请稍后重试") }
+        return try await withCheckedThrowingContinuation { pending in
+            continuation = pending
+            timeout = Task { @MainActor [weak self] in
+                do { try await Task.sleep(for: .seconds(20)) } catch { return }
+                self?.finish(.failure(self?.failure("定位超时，请选择出发地") ?? NSError(domain: "MainlineLocation", code: 1)))
+            }
+            requestIfAuthorized()
+        }
+    }
+
+    private func failure(_ message: String) -> NSError {
+        NSError(domain: "MainlineLocation", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
+    }
+    private func requestIfAuthorized() {
+        guard continuation != nil else { return }
+        switch manager.authorizationStatus {
+        case .notDetermined: manager.requestWhenInUseAuthorization()
+        case .authorizedWhenInUse, .authorizedAlways: manager.requestLocation()
+        case .denied, .restricted: finish(.failure(failure("定位权限未开启，请在设置中允许定位或选择出发地")))
+        @unknown default: finish(.failure(failure("无法获取位置")))
+        }
+    }
+    private func finish(_ result: Result<[String: Double], Error>) {
+        let pending = continuation
+        continuation = nil
+        timeout?.cancel()
+        timeout = nil
+        manager.stopUpdatingLocation()
+        pending?.resume(with: result)
+    }
+    nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        Task { @MainActor [weak self] in self?.requestIfAuthorized() }
+    }
+    nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        guard let location = locations.last, location.horizontalAccuracy >= 0 else { return }
+        let longitude = location.coordinate.longitude, latitude = location.coordinate.latitude
+        Task { @MainActor [weak self] in self?.finish(.success(["longitude": longitude, "latitude": latitude])) }
+    }
+    nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.finish(.failure(self.failure("没有获取到当前位置，请选择出发地")))
+        }
+    }
+}
 
 /// iOS / iPad 侧 WKWebView 宿主：UI 由 `web/` 的 Vue 产物承载。
 ///
@@ -110,6 +172,7 @@ extension WebHost {
         private static let maxDeliveryAttempts = 20
 
         private let store: RoutineStore
+        private let locationProvider = MainlineLocationProvider()
         private weak var webView: WKWebView?
         private var snapshotSubscription: AnyCancellable?
 
@@ -287,19 +350,39 @@ extension WebHost {
             _ userContentController: WKUserContentController,
             didReceive message: WKScriptMessage
         ) {
-            guard message.name == Self.handlerName,
-                  let body = message.body as? [String: Any],
-                  let id = body["id"] as? String,
-                  let method = body["method"] as? String
-            else { return }
-            let params = body["params"] as? [String: Any] ?? [:]
             Task { @MainActor in
+                guard message.name == Self.handlerName,
+                      message.frameInfo.isMainFrame,
+                      let pageURL = message.frameInfo.request.url,
+                      Self.isTrustedPage(pageURL),
+                      let body = message.body as? [String: Any],
+                      let id = body["id"] as? String,
+                      let method = body["method"] as? String else { return }
+                let params = body["params"] as? [String: Any] ?? [:]
                 await self.handle(id: id, method: method, params: params)
             }
         }
 
+        private static func isTrustedPage(_ url: URL) -> Bool {
+            if url.isFileURL,
+               let directory = Bundle.main.resourceURL?.appendingPathComponent("dist", isDirectory: true),
+               url.standardizedFileURL.path.hasPrefix(directory.standardizedFileURL.path + "/") { return true }
+            #if DEBUG
+            if let raw = ProcessInfo.processInfo.environment["MAINLINE_WEB_DEV_SERVER"],
+               let dev = URL(string: raw),
+               url.scheme == dev.scheme, url.host == dev.host, url.port == dev.port { return true }
+            #endif
+            return false
+        }
+
         private func handle(id: String, method: String, params: [String: Any]) async {
             switch method {
+            case "account.request":
+                await requestAccount(id: id, params: params)
+
+            case "location.current":
+                do { reply(id: id, result: try await locationProvider.current()) }
+                catch { reply(id: id, ok: false, error: error.localizedDescription) }
             case "device.info":
                 reply(id: id, result: ["id": store.deviceId, "role": Self.deviceRoleWire])
 
@@ -339,6 +422,38 @@ extension WebHost {
         }
 
         /// `device.info` 的 role（iPad → pad）。
+        private func requestAccount(id: String, params: [String: Any]) async {
+            let allowed: [String: Set<String>] = [
+                "/me": ["GET"], "/login": ["POST"], "/register": ["POST"],
+                "/logout": ["POST"], "/snapshot": ["GET", "PUT"]
+            ]
+            guard let path = params["path"] as? String,
+                  let method = params["method"] as? String,
+                  allowed[path]?.contains(method) == true,
+                  let url = URL(string: "https://47.104.95.146/api/account\(path)") else {
+                reply(id: id, ok: false, error: "账号请求不允许")
+                return
+            }
+            var request = URLRequest(url: url)
+            request.httpMethod = method
+            request.timeoutInterval = 20
+            request.setValue("https://47.104.95.146", forHTTPHeaderField: "Origin")
+            if let body = params["body"] as? String {
+                guard body.utf8.count <= 2_000_000 else { reply(id: id, ok: false, error: "账号数据过大"); return }
+                request.httpBody = body.data(using: .utf8)
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            }
+            do {
+                let (data, response) = try await URLSession.shared.data(for: request)
+                guard let http = response as? HTTPURLResponse,
+                      let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                    reply(id: id, ok: false, error: "账号服务响应异常")
+                    return
+                }
+                reply(id: id, result: ["status": http.statusCode, "data": json])
+            } catch { reply(id: id, ok: false, error: "账号服务暂时无法连接，请检查网络") }
+        }
+
         private static var deviceRoleWire: String {
             UIDevice.current.userInterfaceIdiom == .pad ? "pad" : "phone"
         }
@@ -385,10 +500,13 @@ extension WebHost {
             try? await UNUserNotificationCenter.current().add(request)
         }
 
-        /// `parse.withModel`：转发现有的增强解析服务。
-        /// **安全边界（§7）：API Key 只留在原生侧，绝不进 web 产物。**
+        /// 和浏览器共用阿里云模型代理，App 不再携带上游模型 Key。
         private func parseWithModel(_ input: String) async -> Any? {
-            guard let enhanced = RoutineParsing.current.enhanced else { return nil }
+            guard let endpoint = URL(string: "https://47.104.95.146/api/model/chat/completions") else { return nil }
+            let enhanced = RemoteRoutineParsingService(configuration: .init(
+                endpoint: endpoint, apiKey: nil, model: "cosmo-mind-coder", timeout: 60,
+                retriesWithoutOptionalFields: false
+            ))
             do {
                 guard let parsed = try await enhanced.parse(input, now: Date()) else { return nil }
                 return Self.encodeParseResultWire(parsed)

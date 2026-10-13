@@ -218,7 +218,7 @@ const hasCommute = ref(false);
 const destination = ref('');
 const travelMode = ref<TravelMode>((localStorage.getItem('mm-travel-mode') as TravelMode) || 'driving');
 const amapKey = ref(import.meta.env.VITE_AMAP_WEB_SERVICE_KEY || '');
-const needsSecureLocation = !window.isSecureContext;
+const needsSecureLocation = !window.webkit?.messageHandlers?.mainline && !window.isSecureContext;
 const secureEntryURL = import.meta.env.DEV && import.meta.env.VITE_DEV_HTTPS_URL
   ? `${import.meta.env.VITE_DEV_HTTPS_URL.replace(/\/$/, '')}/${window.location.hash || '#/create'}`
   : '';

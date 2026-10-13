@@ -63,6 +63,7 @@ struct RoutineStep: Identifiable, Codable, Hashable, Sendable {
     var duration: TimeInterval
     var importance: StepImportance
     var role: StepRole
+    var commute: CommuteInfo? = nil
 
     init(
         id: UUID = UUID(),

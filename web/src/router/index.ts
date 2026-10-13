@@ -3,10 +3,12 @@ import HomeView from '../views/HomeView.vue';
 import QuickCreateView from '../views/QuickCreateView.vue';
 import PreviewView from '../views/PreviewView.vue';
 import SessionView from '../views/SessionView.vue';
+import ProfileView from '../views/ProfileView.vue';
 
 const routes: RouteRecordRaw[] = [
   { path: '/', name: 'home', component: HomeView },
-  { path: '/create', name: 'create', component: QuickCreateView },
+  { path: '/create', name: 'create', components: { default: HomeView, drawer: QuickCreateView } },
+  { path: '/profile', name: 'profile', component: ProfileView },
   { path: '/preview', name: 'preview', component: PreviewView },
   { path: '/session', name: 'session', component: SessionView },
   { path: '/:pathMatch(.*)*', redirect: '/' },

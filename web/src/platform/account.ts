@@ -2,10 +2,16 @@ import { reactive } from 'vue';
 import type { RoutineSnapshot } from '../core/types';
 import { decodeSnapshot, encodeSnapshot } from '../core/serialization';
 import type { PlatformBridge } from './bridge';
+import { nativeRequest } from './webview';
 
 export const account = reactive({ user: null as { id: string; username: string } | null, ready: false, status: '', conflict: false });
 const baseURL = import.meta.env.VITE_ACCOUNT_API_URL || '/api/account';
 export async function accountRequest(path: string, method = 'GET', body?: unknown): Promise<any> {
+  if (window.webkit?.messageHandlers?.mainline) {
+    const result = await nativeRequest('account.request', { path, method, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) }) as { status: number; data: any };
+    if (result.status < 200 || result.status >= 300) throw Object.assign(new Error(result.data.error || '账号服务暂时不可用'), { status: result.status });
+    return result.data;
+  }
   const response = await fetch(`${baseURL}${path}`, {
     method, credentials: 'include', signal: AbortSignal.timeout(10000),
     ...(body !== undefined ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}),

@@ -177,7 +177,7 @@ struct RemoteRoutineParsingService: RoutineParsingService {
 
         // 没取到 Key 时给出可操作的提示。否则请求会被判未授权，顶层又只看到「回退规则」，
         // 排查起来会绕远路——最常见的原因就是没有从 Xcode Run 启动。
-        if configuration.apiKey?.isEmpty ?? true {
+        if (configuration.apiKey?.isEmpty ?? true) && configuration.endpoint.host != "47.104.95.146" {
             Self.log("未取到 API Key，请求会因未授权失败。检查是否从 Xcode Run 启动（scheme 环境变量只在 Run 时注入）。")
         }
 

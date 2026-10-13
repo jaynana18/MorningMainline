@@ -16,7 +16,11 @@
     aria-hidden="true"
     focusable="false"
   >
-    <template v-if="name === 'circle'">
+    <template v-if="name === 'person'">
+      <circle cx="8" cy="4.6" r="2.5" />
+      <path d="M3.1 14v-1.3a4.9 4.9 0 0 1 9.8 0V14z" fill="currentColor" stroke="none" />
+    </template>
+    <template v-else-if="name === 'circle'">
       <circle cx="8" cy="8" r="5.5" />
     </template>
     <template v-else-if="name === 'target'">

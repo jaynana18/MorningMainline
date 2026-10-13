@@ -19,9 +19,15 @@ export default defineConfig(({ mode }) => {
     // 只允许配置的 HTTPS 域名，不放开所有 Host。
     allowedHosts: httpsHost ? [httpsHost] : [],
     proxy: {
-      '/api/account/': { target: 'http://127.0.0.1:8788' },
+      '/api/account/': {
+        target: 'https://47.104.95.146',
+        changeOrigin: true,
+        secure: true,
+      },
       '/api/model/': {
-        target: 'http://127.0.0.1:8787',
+        target: 'https://47.104.95.146',
+        changeOrigin: true,
+        secure: true,
       },
     },
   },
