@@ -18,6 +18,7 @@ import type {
 } from '../core/types';
 import { createBrowserBridge } from './browser';
 import { createWebViewBridge } from './webview';
+import { withAccountSync } from './account';
 
 /** 设备信息（§3 方法表 `device.info`）。 */
 export interface DeviceInfo {
@@ -92,7 +93,11 @@ export interface PlatformBridge {
  * 注意：探测必须在**调用时**（而非模块加载时）进行，以便单测/SSR 环境无 `window` 时安全回落到浏览器实现。
  */
 export function createBridge(): PlatformBridge {
-  return detectWebViewHost() ? createWebViewBridge() : createBrowserBridge();
+  return withAccountSync(detectWebViewHost() ? createWebViewBridge() : createBrowserBridge({
+    modelProxyURL: typeof window !== 'undefined' && /^https?:$/.test(window.location.protocol)
+      ? (import.meta.env.VITE_MODEL_PROXY_URL || '/api/model/chat/completions')
+      : null,
+  }));
 }
 
 /** WebView 宿主探测（§3 唯一判据）。 */

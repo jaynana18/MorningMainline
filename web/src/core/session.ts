@@ -122,7 +122,7 @@ export function estimatedDueDates(session: RoutineSession, at: Date): Map<string
       estimated = cursor + remainingWork(item) * 1000;
     }
     result.set(item.id, new Date(estimated));
-    cursor = estimated;
+    cursor = Math.max(cursor, estimated);
   }
 
   const deadline = session.progress.find(

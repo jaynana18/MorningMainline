@@ -84,6 +84,7 @@ export const THINKING_DISABLE_STYLES: readonly ThinkingDisableStyle[] = [
 
 export interface RoutineStep {
   id: string;
+  commute?: CommuteInfo;
   title: string;
   /** 编码后非空：构造时未给则回落 `现在只做：{title}`。 */
   prompt: string;
@@ -91,6 +92,15 @@ export interface RoutineStep {
   duration: number;
   importance: StepImportance;
   role: StepRole;
+}
+
+export interface CommuteInfo {
+  address: string;
+  location: string;
+  origin: string;
+  mode: 'driving' | 'walking' | 'transit';
+  seconds: number;
+  polyline: string;
 }
 
 export interface RoutineTemplate {
@@ -105,6 +115,7 @@ export interface RoutineTemplate {
   /** 旧数据可能整键缺失 → 解码后为 null；读时用 effectiveRecurrence 回落 `once`。 */
   recurrence: Recurrence | null;
   steps: RoutineStep[];
+  commute?: CommuteInfo;
 }
 
 export interface StepProgress {
@@ -285,13 +296,33 @@ export type Fetcher = (url: string, init: HttpRequestInit) => Promise<HttpRespon
 // 纯构造工厂（替代 Swift 的 init(...= 默认值)）
 // ---------------------------------------------------------------------------
 
-/** 标准全局 crypto（Node 19+ / 浏览器 / WebView 均有），非 DOM/宿主专属 API。 */
+/**
+ * UUID 生成：安全上下文优先用 randomUUID；普通 HTTP 局域网/Tailscale 地址回退 getRandomValues。
+ * 浏览器只把 localhost 特判为安全上下文，直接用 http://局域网IP 时 randomUUID 可能不存在。
+ */
 export function randomUUID(): string {
-  return globalThis.crypto.randomUUID();
+  const cryptoObject = globalThis.crypto;
+  if (typeof cryptoObject?.randomUUID === 'function') {
+    return cryptoObject.randomUUID();
+  }
+
+  const bytes = new Uint8Array(16);
+  if (typeof cryptoObject?.getRandomValues === 'function') {
+    cryptoObject.getRandomValues(bytes);
+  } else {
+    for (let index = 0; index < bytes.length; index += 1) {
+      bytes[index] = Math.floor(Math.random() * 256);
+    }
+  }
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = [...bytes].map((value) => value.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 export interface RoutineStepInit {
   id?: string;
+  commute?: CommuteInfo;
   title: string;
   prompt?: string | null;
   duration: number;
@@ -301,6 +332,7 @@ export interface RoutineStepInit {
 
 export function createStep(init: RoutineStepInit): RoutineStep {
   return {
+    ...(init.commute ? { commute: { ...init.commute } } : {}),
     id: init.id ?? randomUUID(),
     title: init.title,
     prompt: init.prompt ?? `现在只做：${init.title}`,
@@ -320,6 +352,7 @@ export interface RoutineTemplateInit {
   buffer?: number;
   recurrence?: Recurrence | null;
   steps: RoutineStep[];
+  commute?: CommuteInfo;
 }
 
 export function createTemplate(init: RoutineTemplateInit): RoutineTemplate {
@@ -333,6 +366,7 @@ export function createTemplate(init: RoutineTemplateInit): RoutineTemplate {
     buffer: init.buffer ?? 0,
     recurrence: init.recurrence === undefined ? 'once' : init.recurrence,
     steps: init.steps,
+    ...(init.commute ? { commute: { ...init.commute } } : {}),
   };
 }
 
@@ -423,11 +457,12 @@ export function createSnapshot(init: RoutineSnapshotInit): RoutineSnapshot {
 // ---------------------------------------------------------------------------
 
 export function cloneStep(step: RoutineStep): RoutineStep {
-  return { ...step };
+  return { ...step, ...(step.commute ? { commute: { ...step.commute } } : {}) };
 }
 
 export function cloneTemplate(template: RoutineTemplate): RoutineTemplate {
-  return { ...template, steps: template.steps.map(cloneStep) };
+  return { ...template, steps: template.steps.map(cloneStep),
+    ...(template.commute ? { commute: { ...template.commute } } : {}) };
 }
 
 export function cloneProgress(progress: StepProgress): StepProgress {

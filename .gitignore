@@ -11,6 +11,11 @@ xcuserdata/
 # Web 端（web/）依赖与构建产物
 web/node_modules/
 web/dist/
+web/.env.local
+web/.env.*.local
+server/.env
+server/.env.account
+server/data/
 
 # cross-check Swift harness 编译产物（体积大，跑 run.sh 可随时重建）
 tools/cross-check/*/harness

@@ -43,6 +43,10 @@ export { RECURRENCE_TITLES, RECURRENCES, PARSE_SOURCE_TITLES };
 export { deadlineStep, effectiveRecurrence, totalTaskDuration } from '../core/session';
 // 预览页（PreviewView）需要的派生纯函数：只保留 task 步骤 / 计算某天的截止时刻。
 export { deadlineOn, taskSteps } from '../core/session';
+export { editTasks } from '../core/taskEdits';
+export { queryCommute } from '../platform/commute';
+export type { TravelMode, CommuteRoute } from '../platform/commute';
+export { createStep } from '../core/types';
 // 会话页（SessionView）需要的派生纯函数：预计排程 / 是否迟到 / 未完成判定 / 原计划时间。
 export {
   estimatedCompletion,
@@ -119,6 +123,7 @@ export interface StartOptions {
 export interface CreateTemplateOptions {
   deadline: Date | null;
   recurrence: Recurrence;
+  steps?: import('../core/types').RoutineStep[];
 }
 
 export const useRoutineStore = defineStore('routine', () => {
@@ -301,7 +306,7 @@ export const useRoutineStore = defineStore('routine', () => {
   function createTemplate(input: string, opts: CreateTemplateOptions): RoutineTemplate {
     const now = new Date();
     const cached = lastParse.value;
-    const steps = cached && cached.hasSteps ? cached.steps : makeSteps(input);
+    const steps = opts.steps ?? (cached && cached.hasSteps ? cached.steps : makeSteps(input));
     const template = makeTemplate(steps, opts.deadline, opts.recurrence, now, tz);
     if (!template) {
       throw new Error('无法生成任务线：没有可识别的任务步骤。');
@@ -311,6 +316,17 @@ export const useRoutineStore = defineStore('routine', () => {
 
   function addTemplate(template: RoutineTemplate): void {
     requireRoutine().addTemplate(template);
+    commit();
+  }
+
+  function replaceTemplate(template: RoutineTemplate): void {
+    requireRoutine().replaceTemplate(template);
+    commit();
+  }
+
+  function deleteTemplate(id: string): void {
+    requireRoutine().deleteTemplate(id);
+    if (pendingTemplate.value?.id === id) pendingTemplate.value = null;
     commit();
   }
 
@@ -328,13 +344,18 @@ export const useRoutineStore = defineStore('routine', () => {
     commit();
   }
 
-  function startProgress(progress: StepProgress): void {
-    requireRoutine().startProgress(progress);
+  function startProgress(progress: StepProgress, now?: Date): void {
+    requireRoutine().startProgress(progress, now);
     commit();
   }
 
-  function complete(progress: StepProgress): void {
-    requireRoutine().complete(progress);
+  function startParallelProgress(progressIDs: string[], now?: Date): void {
+    requireRoutine().startParallelProgress(progressIDs, now);
+    commit();
+  }
+
+  function complete(progress: StepProgress, now?: Date): void {
+    requireRoutine().complete(progress, now);
     commit();
   }
 
@@ -400,9 +421,12 @@ export const useRoutineStore = defineStore('routine', () => {
     parse,
     createTemplate,
     addTemplate,
+    replaceTemplate,
+    deleteTemplate,
     selectTemplate,
     start,
     startProgress,
+    startParallelProgress,
     complete,
     snoozeCurrent,
     addTemporaryTask,

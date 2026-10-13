@@ -2,7 +2,7 @@
   <div>
     <header class="mm-toolbar">
       <button class="mm-btn mm-btn--secondary" @click="onCancel">取消</button>
-      <span class="mm-title">一句话创建</span>
+      <span class="mm-title">{{ editingID ? '一句话修改' : '一句话创建' }}</span>
       <button class="mm-btn mm-btn--primary" :disabled="generated === null" @click="onSave">
         保存
       </button>
@@ -19,7 +19,7 @@
         ></textarea>
         <!-- 示例文案：与 iOS 版一致，只在编辑器下方出现一次（原版 TextEditor 无 placeholder）。 -->
         <p class="mm-hint" style="margin-top: 8px">
-          例：18点30结束，去厕所5分钟 刷杯子2分钟 买水果10分钟
+          例：刷牙3分钟，去凯德逛30分钟，再去宜家待1小时，18点结束。
         </p>
         <p style="color: var(--mm-orange); font-size: 12px; display: flex; align-items: center; gap: 4px">
           <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -31,6 +31,55 @@
         <!-- footer 文案（逐字） -->
         <p class="mm-hint">截止时间可以直接写进去，比如「18点30结束」；生成后也能手动调整。</p>
       </section>
+
+      <div v-if="destinationDialog" class="mm-modal-backdrop" @click.self="closeDestination">
+        <section class="mm-modal" role="dialog" aria-modal="true" aria-label="确认目的地" style="max-height: 85vh; overflow-y: auto">
+          <div class="mm-row"><h4>确认「{{ destination }}」</h4><button class="mm-btn mm-btn--secondary" @click="closeDestination">返回修改原句</button></div>
+          <p class="mm-hint">第 {{ stopIndex + 1 }} / {{ pendingStops.length }} 个地点</p>
+          <p class="mm-hint">{{ commuteItems.length ? `从${commuteItems[commuteItems.length - 1].route.address}出发` : '从当前位置出发' }}</p>
+          <details style="margin-top: 10px">
+            <summary>通勤设置</summary>
+            <label>交通方式
+              <select v-model="travelMode" class="mm-input">
+                <option value="driving">开车</option>
+                <option value="walking">步行</option>
+                <option value="transit">公交 / 地铁</option>
+              </select>
+            </label>
+            <label>高德 Web 服务 Key
+              <input v-model="amapKey" type="password" autocomplete="off" class="mm-input" placeholder="当前页面使用，不写入任务数据" />
+            </label>
+          </details>
+          <p class="mm-hint">优先搜索出发地附近的同名地点，定位失败时按名称搜索。选中后显示地图并查询路程。</p>
+          <div v-if="selectedPlace" style="margin-top: 12px">
+            <p>{{ selectedPlace.name }} <span class="mm-hint">{{ selectedPlace.address }}</span></p>
+            <MapPreview :src="destinationMapURL(amapKey, selectedPlace.location)" :title="selectedPlace.name" />
+          </div>
+          <div v-if="needsOrigin">
+            <label>出发地名称<input v-model="originQuery" class="mm-input" placeholder="例如：青岛站" /></label>
+            <button class="mm-btn mm-btn--secondary" :disabled="routeBusy || !originQuery.trim()" @click="searchOrigin">搜索出发地</button>
+            <button v-for="place in originCandidates" :key="place.id" class="mm-btn mm-btn--secondary" style="display: block; margin-top: 8px; white-space: normal" :disabled="routeBusy" @click="chooseOrigin(place)">{{ place.name }} · {{ place.address }}</button>
+          </div>
+          <p v-if="needsSecureLocation" class="mm-hint" style="color: var(--mm-red)">
+            手机定位需要通过 HTTPS 打开。
+            <a v-if="secureEntryURL" :href="secureEntryURL">切换到 HTTPS 版本</a>
+            <span v-else>请使用 HTTPS 地址或电脑 localhost 测试。</span>
+            未保存的输入不会随页面切换保留。
+          </p>
+          <p v-if="routeBusy" class="mm-hint">正在查询…</p>
+          <button v-if="routeError" class="mm-btn mm-btn--secondary" :disabled="routeBusy" @click="lookupRoute()">重新搜索候选地点</button>
+          <div v-if="destinationCandidates.length" style="margin-top: 12px">
+            <p class="mm-hint">{{ candidateHint }}</p>
+            <button v-for="candidate in destinationCandidates" :key="candidate.id"
+              class="mm-btn mm-btn--secondary" style="display: block; width: 100%; margin-top: 8px; text-align: left; white-space: normal"
+              :disabled="routeBusy" @click="selectPlace(candidate)">
+              {{ candidate.name }}<span v-if="candidate.distanceMeters != null" class="mm-hint"> · {{ candidate.distanceMeters < 1000 ? `${candidate.distanceMeters}米` : `${(candidate.distanceMeters / 1000).toFixed(1)}公里` }}</span><br /><span class="mm-hint">{{ candidate.address }}</span>
+            </button>
+          </div>
+          <p v-if="routeError" role="alert" style="color: var(--mm-red)">{{ routeError }}</p>
+        </section>
+      </div>
+      <p v-if="errorMessage" role="alert" style="color: var(--mm-red)">{{ errorMessage }}</p>
 
       <!-- ② 计划设置（仅「重复」选择） -->
       <section class="mm-section">
@@ -56,7 +105,7 @@
         <button
           class="mm-btn mm-btn--primary"
           style="width: 100%"
-          :disabled="input.trim() === '' || isParsing"
+          :disabled="input.trim() === '' || isParsing || routeBusy || destinationDialog"
           data-testid="generate"
           @click="generate"
         >
@@ -104,6 +153,18 @@
               {{ step.role === 'deadline' ? '硬节点' : formatMinutes(step.duration) }}
             </span>
           </div>
+          <div v-for="item in commuteItems" :key="item.step.id" style="margin-top: 10px">
+            <p class="mm-hint">{{ item.step.title }}</p>
+            <CommuteMap :route="item.route" />
+          </div>
+          <template v-if="hasCommute && route && hasDeadline">
+            <label>固定缓冲（分钟）<input v-model.number="bufferMinutes" class="mm-input" type="number" min="0" max="120" /></label>
+            <p class="mm-hint">最晚开始准备 {{ preparationTime }} · 最晚出门 {{ departureTime }}</p>
+          </template>
+          <div style="margin-top: 16px">
+            <input v-model="editInstruction" class="mm-input" placeholder="在刷牙前增加喝水 2 分钟 / 刷牙增加 1 分钟" />
+            <button class="mm-btn mm-btn--secondary" style="margin-top: 8px" @click="applyEdit">预览修改</button>
+          </div>
         </section>
       </template>
     </main>
@@ -111,22 +172,34 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, onMounted, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import {
   RECURRENCES,
   RECURRENCE_TITLES,
   formatMinutes,
   useRoutineStore,
+  createStep,
+  editTasks,
+  queryCommute,
+  type TravelMode,
+  type CommuteRoute,
   type Recurrence,
   type RoutineStep,
   type RoutineTemplate,
 } from '../stores/routine';
+import { DestinationSelectionRequired, OriginRequired, destinationMapURL, type CommuteDestination } from '../platform/commute';
+import CommuteMap from './CommuteMap.vue';
+import MapPreview from './MapPreview.vue';
+import { splitItinerary, type ItineraryStop } from '../core/itinerary';
+import { inferredDeadline } from '../core/parser';
+import { defaultTimeZone } from '../core/serialization';
 import { iconNameForSymbol } from './session/helpers';
 import SessionIcon from './session/SessionIcon.vue';
 
 const store = useRoutineStore();
 const router = useRouter();
+const pageRoute = useRoute();
 
 const input = ref('');
 /** 解析出的任务步骤；改截止时间/重复方式时据此重算模板，避免重走解析。 */
@@ -137,6 +210,148 @@ const isParsing = ref(false);
 const hasDeadline = ref(false);
 const selectedDeadline = ref<Date>(new Date());
 const recurrence = ref<Recurrence>('once');
+const editingID = ref<string | null>(null);
+const editingTemplate = ref<RoutineTemplate | null>(null);
+const editInstruction = ref('');
+const errorMessage = ref('');
+const hasCommute = ref(false);
+const destination = ref('');
+const travelMode = ref<TravelMode>((localStorage.getItem('mm-travel-mode') as TravelMode) || 'driving');
+const amapKey = ref(import.meta.env.VITE_AMAP_WEB_SERVICE_KEY || '');
+const needsSecureLocation = !window.isSecureContext;
+const secureEntryURL = import.meta.env.DEV && import.meta.env.VITE_DEV_HTTPS_URL
+  ? `${import.meta.env.VITE_DEV_HTTPS_URL.replace(/\/$/, '')}/${window.location.hash || '#/create'}`
+  : '';
+const route = ref<CommuteRoute | null>(null);
+const routeBusy = ref(false);
+const bufferMinutes = ref(10);
+const commuteItems = ref<{ step: RoutineStep; route: CommuteRoute }[]>([]);
+const destinationDialog = ref(false);
+const routeError = ref('');
+const selectedPlace = ref<CommuteDestination | null>(null);
+const needsOrigin = ref(false);
+const originQuery = ref('');
+const originCandidates = ref<CommuteDestination[]>([]);
+const manualOrigin = ref('');
+function selectPlace(place: CommuteDestination): void {
+  selectedPlace.value = place;
+  void lookupRoute(place);
+}
+async function searchOrigin(): Promise<void> {
+  const requestID = ++routeRequest;
+  routeBusy.value = true;
+  routeError.value = '';
+  originCandidates.value = [];
+  try {
+    await queryCommute(amapKey.value, originQuery.value, travelMode.value);
+  } catch (error) {
+    if (requestID !== routeRequest) return;
+    if (error instanceof DestinationSelectionRequired) originCandidates.value = error.candidates;
+    else routeError.value = error instanceof Error ? error.message : '搜索失败，请重试。';
+  } finally { if (requestID === routeRequest) routeBusy.value = false; }
+}
+function chooseOrigin(place: CommuteDestination): void {
+  manualOrigin.value = place.location;
+  needsOrigin.value = false;
+  originCandidates.value = [];
+  if (selectedPlace.value) void lookupRoute(selectedPlace.value);
+}
+let routeRequest = 0;
+let generation = 0;
+const pendingStops = ref<ItineraryStop[]>([]);
+const stopIndex = ref(0);
+function openDestination(): void {
+  selectedPlace.value = null;
+  needsOrigin.value = false;
+  destination.value = pendingStops.value[stopIndex.value].query;
+  routeError.value = '';
+  destinationCandidates.value = [];
+  destinationDialog.value = true;
+  void lookupRoute();
+}
+function closeDestination(): void {
+  generation++;
+  routeRequest++;
+  destinationDialog.value = false;
+  routeBusy.value = false;
+  destinationCandidates.value = [];
+  generated.value = null;
+}
+const destinationCandidates = ref<CommuteDestination[]>([]);
+const candidateHint = ref('请选择具体目的地，确认后查询通勤：');
+const departureTime = computed(() => {
+  const firstTravel = parsedSteps.value.findIndex(step => commuteItems.value.some(item => item.step.id === step.id));
+  const remaining = parsedSteps.value.slice(Math.max(0, firstTravel)).reduce((sum, step) => sum + step.duration, 0);
+  const date = new Date(selectedDeadline.value.getTime() - (remaining + bufferMinutes.value * 60) * 1000);
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+});
+const preparationTime = computed(() => {
+  const seconds = parsedSteps.value.filter((step) => step.role === 'task').reduce((sum, step) => sum + step.duration, 0);
+  const date = new Date(selectedDeadline.value.getTime() - (seconds + bufferMinutes.value * 60) * 1000);
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+});
+
+async function lookupRoute(selectedDestination?: CommuteDestination): Promise<void> {
+  const requestedDestination = destination.value;
+  const requestedMode = travelMode.value;
+  const requestID = ++routeRequest;
+  routeBusy.value = true;
+  routeError.value = '';
+  if (!selectedDestination) destinationCandidates.value = [];
+  try {
+    const previous = commuteItems.value[commuteItems.value.length - 1]?.route;
+    const result = await queryCommute(amapKey.value, requestedDestination, requestedMode, selectedDestination, previous?.location || manualOrigin.value || undefined);
+    if (requestID !== routeRequest || destination.value !== requestedDestination || travelMode.value !== requestedMode || !hasCommute.value) return;
+    const activities = pendingStops.value[stopIndex.value].activities;
+    const tasks = activities.trim() ? (await store.parse(activities)).steps : [];
+    if (requestID !== routeRequest || !destinationDialog.value) return;
+    route.value = result;
+    const step = createStep({ title: `通勤到${result.address}`, duration: result.seconds, commute: result });
+    commuteItems.value.push({ step, route: result });
+    parsedSteps.value.push(step, ...tasks.map(task => ({ ...task, title: `${result.address} · ${task.title}` })));
+    stopIndex.value++;
+    if (stopIndex.value < pendingStops.value.length) openDestination();
+    else {
+      destinationDialog.value = false;
+      destinationCandidates.value = [];
+      rebuild();
+    }
+  } catch (error) {
+    if (requestID !== routeRequest || destination.value !== requestedDestination || travelMode.value !== requestedMode || !hasCommute.value) return;
+    if (error instanceof OriginRequired) {
+      needsOrigin.value = true;
+      routeError.value = error.message;
+    } else if (error instanceof DestinationSelectionRequired) {
+      destinationCandidates.value = error.candidates;
+      candidateHint.value = error.message;
+    }
+    else routeError.value = error instanceof Error ? error.message : '通勤查询失败，请重试。';
+  }
+  finally { if (requestID === routeRequest) routeBusy.value = false; }
+}
+
+function applyEdit(): void {
+  try {
+    parsedSteps.value = editTasks(parsedSteps.value, editInstruction.value);
+    rebuild();
+    editInstruction.value = '';
+    errorMessage.value = '';
+  } catch (error) { errorMessage.value = error instanceof Error ? error.message : '没有识别到修改。'; }
+}
+
+onMounted(() => {
+  const template = pageRoute.query.edit ? store.pendingTemplate : null;
+  if (!template) return;
+  editingID.value = template.id;
+  editingTemplate.value = template;
+  parsedSteps.value = template.steps.filter((step) => step.role === 'task').map((step) => ({ ...step }));
+  recurrence.value = template.recurrence ?? 'once';
+  hasDeadline.value = template.mode === 'backward';
+  const date = new Date();
+  date.setHours(template.deadlineHour ?? 0, template.deadlineMinute ?? 0, 0, 0);
+  selectedDeadline.value = date;
+  generated.value = template;
+});
 
 function pad(value: number): string {
   return String(value).padStart(2, '0');
@@ -161,22 +376,38 @@ const modeTitle = computed(() =>
 );
 
 async function generate(): Promise<void> {
+  const currentGeneration = ++generation;
   isParsing.value = true;
+  errorMessage.value = '';
+  generated.value = null;
+  commuteItems.value = [];
+  route.value = null;
   try {
-    const result = await store.parse(input.value);
-    if (!result.hasSteps) {
+    const itinerary = splitItinerary(input.value);
+    pendingStops.value = itinerary.stops;
+    stopIndex.value = 0;
+    hasCommute.value = itinerary.stops.length > 0;
+    const taskText = hasCommute.value ? itinerary.preparation.replace(/(?:然后|接着|之后|再|最后|先)\s*$/, '').trim() : input.value;
+    const result = taskText ? await store.parse(taskText) : { steps: [], hasSteps: false, deadline: null };
+    if (currentGeneration !== generation) return;
+    if (!result.hasSteps && !hasCommute.value) {
       parsedSteps.value = [];
       generated.value = null;
       return;
     }
     // 模型/规则没给出截止时间时，store.parse 已用 inferredDeadline 回落。
-    const resolved = result.deadline;
+    const resolved = inferredDeadline(input.value, new Date(), defaultTimeZone()) ?? result.deadline;
     parsedSteps.value = result.steps;
     hasDeadline.value = resolved !== null;
     if (resolved) {
       selectedDeadline.value = resolved;
     }
-    rebuild();
+    if (hasCommute.value) openDestination();
+    else rebuild();
+  } catch (error) {
+    if (currentGeneration !== generation) return;
+    generated.value = null;
+    errorMessage.value = error instanceof Error ? error.message : '生成失败，请重试。';
   } finally {
     isParsing.value = false;
   }
@@ -184,7 +415,7 @@ async function generate(): Promise<void> {
 
 /** 只重算模板，不碰解析结果 —— 改截止时间/重复方式都走这里，绝不丢掉已解析步骤。 */
 function rebuild(): void {
-  if (parsedSteps.value.length === 0) {
+  if (parsedSteps.value.length === 0 && !commuteItems.value.length) {
     generated.value = null;
     return;
   }
@@ -192,23 +423,54 @@ function rebuild(): void {
     generated.value = store.createTemplate(input.value, {
       deadline: hasDeadline.value ? selectedDeadline.value : null,
       recurrence: recurrence.value,
+      steps: parsedSteps.value,
     });
+    if (editingTemplate.value) {
+      generated.value.id = editingTemplate.value.id;
+      generated.value.name = editingTemplate.value.name;
+      generated.value.symbol = editingTemplate.value.symbol;
+      generated.value.buffer = editingTemplate.value.buffer;
+      generated.value.commute = editingTemplate.value.commute;
+      const oldDeadline = editingTemplate.value.steps.find((step) => step.role === 'deadline');
+      const newDeadline = generated.value.steps.find((step) => step.role === 'deadline');
+      if (oldDeadline && newDeadline) { newDeadline.title = oldDeadline.title; newDeadline.prompt = oldDeadline.prompt; }
+    }
+    if (hasCommute.value) {
+      generated.value.commute = route.value ? { ...route.value } : undefined;
+      generated.value.buffer = Math.max(0, Number(bufferMinutes.value) || 0) * 60;
+      generated.value.name = `去${route.value?.address ?? destination.value}`;
+      const deadline = generated.value.steps.find((step) => step.role === 'deadline');
+      if (deadline) deadline.title = pendingStops.value[pendingStops.value.length - 1]?.activities
+        ? '结束' : `到达${route.value?.address ?? destination.value}`;
+    }
   } catch {
     generated.value = null;
   }
 }
 
 // 改截止时间 / 重复方式 → 即时重算且保留已解析步骤。
-watch([hasDeadline, selectedDeadline, recurrence], () => {
+watch([hasDeadline, selectedDeadline, recurrence, bufferMinutes], () => {
   if (generated.value !== null) {
     rebuild();
   }
 });
+watch(travelMode, () => {
+  destinationCandidates.value = [];
+  routeRequest++;
+  routeBusy.value = false;
+  routeError.value = '';
+  localStorage.setItem('mm-travel-mode', travelMode.value);
+  if (destinationDialog.value) void lookupRoute();
+});
 
 // 输入变化 → 上次生成结果作废（截止时间区随之收回）。
 watch(input, () => {
+  closeDestination();
   parsedSteps.value = [];
   generated.value = null;
+  commuteItems.value = [];
+  route.value = null;
+  hasCommute.value = false;
 });
 
 async function onSave(): Promise<void> {
@@ -224,7 +486,8 @@ async function onSave(): Promise<void> {
     store.notice = '数据还没准备好，请稍后再试。';
     return;
   }
-  store.addTemplate(generated.value);
+  if (editingID.value) store.replaceTemplate(generated.value);
+  else store.addTemplate(generated.value);
   // 保存后进预览页（选本次计划 / 原计划），对齐 Swift `selectedTemplate = template`。
   store.selectTemplate(generated.value);
   void router.push('/preview');

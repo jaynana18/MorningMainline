@@ -25,25 +25,34 @@
            init 完成前不渲染：store 创建时 templates 已带内置种子，
            提前渲染会先闪一帧种子模板（用户自建的可能不同），且点击会撞上未建好的 core 状态机。 -->
       <div v-else class="mm-grid">
-        <button
+        <div
           v-for="(template, index) in store.templates"
           :key="template.id"
           class="mm-card"
           :style="{ background: cardColor(index) }"
           @click="startTemplate(template)"
+          role="button"
+          tabindex="0"
+          @keydown.enter.self="startTemplate(template)"
+          @keydown.space.self.prevent="startTemplate(template)"
         >
+          <button class="mm-btn mm-btn--secondary mm-card-delete" :aria-label="`删除${template.name}`" @click.stop="deletingTemplate = template">
+            <SessionIcon name="trash" :size="14" />删除
+          </button>
           <span class="mm-card__symbol">
             <SessionIcon :name="iconNameForSymbol(template.symbol)" :size="22" />
           </span>
           <span class="mm-card__name">{{ template.name }}</span>
           <span class="mm-card__summary">{{ summaryOf(template) }}</span>
+          <CommuteMap v-if="template.commute" :route="template.commute" />
           <span class="mm-card__meta">
             <span v-if="template.mode === 'backward'">↩ 倒推计划</span>
             <span v-else>↪ 正计时</span>
             <span style="margin-left: auto">→</span>
           </span>
-        </button>
+        </div>
       </div>
+      <p v-if="store.ready && !store.templates.length" class="mm-hint">还没有任务线，试试一句话创建。</p>
 
       <!-- 一句话新建任务线 -->
       <button
@@ -70,11 +79,22 @@
         <SessionIcon name="chevron-right" :size="16" />
       </button>
     </main>
+    <div v-if="deletingTemplate" class="mm-modal-backdrop" @click.self="deletingTemplate = null" @keydown.esc="deletingTemplate = null">
+      <section class="mm-modal mm-modal--dialog" role="dialog" aria-modal="true" aria-label="删除任务线">
+        <h4>删除「{{ deletingTemplate.name }}」？</h4>
+        <p class="mm-hint">删除后会从任务列表和同步数据中移除。已经开始的执行进度会保留。</p>
+        <div class="mm-actions mm-actions--end">
+          <button class="mm-btn mm-btn--secondary" @click="deletingTemplate = null">取消</button>
+          <button class="mm-btn mm-btn--danger" @click="confirmDelete">删除</button>
+        </div>
+      </section>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { useRouter } from 'vue-router';
+import { ref } from 'vue';
 import {
   deadlineStep,
   formatMinutes,
@@ -84,9 +104,16 @@ import {
 } from '../stores/routine';
 import { iconNameForSymbol } from './session/helpers';
 import SessionIcon from './session/SessionIcon.vue';
+import CommuteMap from './CommuteMap.vue';
 
 const store = useRoutineStore();
 const router = useRouter();
+const deletingTemplate = ref<RoutineTemplate | null>(null);
+function confirmDelete(): void {
+  if (!deletingTemplate.value) return;
+  store.deleteTemplate(deletingTemplate.value.id);
+  deletingTemplate.value = null;
+}
 
 const CARD_COLORS = [
   'var(--mm-soft-sky)',
@@ -130,3 +157,8 @@ async function startTemplate(template: RoutineTemplate): Promise<void> {
   void router.push('/preview');
 }
 </script>
+
+<style scoped>
+.mm-card { position: relative; }
+.mm-card-delete { position: absolute; top: 12px; right: 12px; display: inline-flex; align-items: center; gap: 4px; font-size: 11px; }
+</style>

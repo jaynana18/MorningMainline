@@ -510,6 +510,24 @@ extension WebHost {
             }
         }
 
+        // 高德链接交给系统浏览器/地图处理，避免导航离开当前 Vue 页面。
+        nonisolated func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationAction: WKNavigationAction,
+            decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+        ) {
+            if navigationAction.navigationType == .linkActivated,
+               let url = navigationAction.request.url,
+               url.scheme == "https", url.host == "uri.amap.com", url.path == "/navigation" {
+                decisionHandler(.cancel)
+                Task { @MainActor in
+                    UIApplication.shared.open(url)
+                }
+                return
+            }
+            decisionHandler(.allow)
+        }
+
         /// 页面加载完成：标记就绪，并按到达顺序 flush 待发队列。
         /// 注意：`didFinish` 只保证文档加载完毕，JS bundle 可能仍在执行；未挂上时靠 `deliver` 重试补上。
         nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {

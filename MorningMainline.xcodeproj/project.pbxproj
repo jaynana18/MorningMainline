@@ -128,7 +128,7 @@
 		685366F1FF3CFF057A7CB78A /* RoutineStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutineStore.swift; sourceTree = "<group>"; };
 		6AB6CC70F649647AE9589AF3 /* RoutineParsingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutineParsingService.swift; sourceTree = "<group>"; };
 		6F33D018B01AF8A6882A36BE /* deadline-overdue.aiff */ = {isa = PBXFileReference; lastKnownFileType = audio.aiff; path = "deadline-overdue.aiff"; sourceTree = "<group>"; };
-		6F9961BEA5AB0C40814660E8 /* MorningMainline.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = MorningMainline.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		6F9961BEA5AB0C40814660E8 /* MorningMainline.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MorningMainline.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		79C9D45333DF4368CADE33B3 /* RemoteRoutineParsingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteRoutineParsingService.swift; sourceTree = "<group>"; };
 		81252AB16B5C74E922A67BF0 /* MorningMainlineApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MorningMainlineApp.swift; sourceTree = "<group>"; };
 		86208CD1A566ECA2411EAA66 /* MainlineWatchWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainlineWatchWidget.swift; sourceTree = "<group>"; };
@@ -392,7 +392,6 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					1E0FC3B41F508E491B70D0B1 = {
-						DevelopmentTeam = HN3GC82LRP;
 						ProvisioningStyle = Automatic;
 					};
 					35980832CE1839F631E4C3B4 = {
@@ -557,6 +556,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = iOS/MorningMainline.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = HN3GC82LRP;
 				INFOPLIST_FILE = iOS/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -608,6 +608,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = iOS/MorningMainline.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = HN3GC82LRP;
 				INFOPLIST_FILE = iOS/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (

@@ -18,7 +18,7 @@ import type {
   StepProgress,
   TemporaryTaskPlacement,
 } from './types';
-import { createProgress, createSession, createStep, initialSnapshot } from './types';
+import { createProgress, createSession, createStep, initialSnapshot, randomUUID } from './types';
 import {
   deadlineOn,
   isIncomplete,
@@ -50,7 +50,7 @@ export class RoutineStore {
 
   constructor(options: RoutineStoreOptions) {
     this.deviceRole = options.deviceRole;
-    this.deviceID = options.deviceID ?? globalThis.crypto.randomUUID();
+    this.deviceID = options.deviceID ?? randomUUID();
     this.tz = options.tz ?? defaultTimeZone();
     this._snapshot = options.initialSnapshot ?? initialSnapshot();
     this.onCommit = options.onCommit ?? (() => {});
@@ -98,6 +98,22 @@ export class RoutineStore {
   /** 插入到 0 位后 commit。 */
   addTemplate(template: RoutineTemplate): void {
     this._snapshot.templates.unshift(template);
+    this.commit();
+  }
+
+  /** 修改模板不改写已经启动的会话。 */
+  replaceTemplate(template: RoutineTemplate): void {
+    const index = this._snapshot.templates.findIndex((item) => item.id === template.id);
+    if (index < 0) return;
+    this._snapshot.templates[index] = template;
+    this.commit();
+  }
+
+  /** 删除任务线模板，执行中的会话保留自己的步骤快照。 */
+  deleteTemplate(id: string): void {
+    const index = this._snapshot.templates.findIndex(template => template.id === id);
+    if (index < 0) return;
+    this._snapshot.templates.splice(index, 1);
     this.commit();
   }
 
@@ -183,6 +199,43 @@ export class RoutineStore {
     this.commit(now);
   }
 
+  /** 启动一个最多两项的并行组；组内任务共享起点，各自按自己的时长计时。 */
+  startParallelProgress(progressIDs: string[], now: Date = this.clock()): void {
+    const session = this._snapshot.activeSession;
+    const ids = [...new Set(progressIDs)].slice(0, 2);
+    if (!session || session.state !== 'running' || session.activeProgressID !== null || ids.length < 2) {
+      return;
+    }
+
+    const selected = ids
+      .map((id) => session.progress.find((item) => item.id === id))
+      .filter(
+        (item): item is StepProgress =>
+          item !== undefined &&
+          item.step.role === 'task' &&
+          (item.state === 'pending' || item.state === 'suspended'),
+      );
+    if (selected.length !== ids.length) return;
+
+    session.progress = [
+      ...selected,
+      ...session.progress.filter((item) => !ids.includes(item.id)),
+    ];
+    for (const item of selected) {
+      item.state = 'active';
+      item.startedAt = now;
+      item.dueAt = new Date(now.getTime() + remainingWork(item) * 1000);
+    }
+    session.activeProgressID = selected[0].id;
+    session.suspendedProgressIDs = (session.suspendedProgressIDs ?? []).filter(
+      (id) => !ids.includes(id),
+    );
+    this.recalculateExpectedSchedule(session, now);
+    session.revision += 1;
+    session.updatedAt = now;
+    this.commit(now);
+  }
+
   // ---- §3.3 完成 ----
 
   complete(progress: StepProgress, now: Date = this.clock()): void {
@@ -198,10 +251,12 @@ export class RoutineStore {
     const wasActive = session.activeProgressID === progress.id;
     session.progress[index].state = 'completed';
     session.progress[index].completedAt = now;
-    session.progress[index].startedAt = null;
+    // 已发生任务保留真实起点，供时间轴在完成后继续固定显示开始/结束边界。
     session.progress[index].remainingDuration = 0;
     if (wasActive) {
-      session.activeProgressID = null;
+      session.activeProgressID =
+        session.progress.find((item) => item.state === 'active' && item.id !== progress.id)?.id ??
+        null;
     }
 
     const onlyDeadlineRemains =
@@ -454,7 +509,8 @@ export class RoutineStore {
       } else {
         session.progress[i].dueAt = new Date(cursor + remainingWork(session.progress[i]) * 1000);
       }
-      cursor = session.progress[i].dueAt.getTime();
+      // 并行任务可能长短不同，游标只能向后走，不能被较短支线拉回。
+      cursor = Math.max(cursor, session.progress[i].dueAt.getTime());
     }
   }
 

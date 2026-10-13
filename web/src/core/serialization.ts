@@ -236,6 +236,7 @@ function requiredEnum<T extends string>(
 
 function encodeStep(step: RoutineStep): JsonObject {
   return {
+    ...(step.commute ? { commute: { ...step.commute } } : {}),
     id: step.id,
     title: step.title,
     prompt: step.prompt,
@@ -256,6 +257,7 @@ function encodeTemplate(template: RoutineTemplate): JsonObject {
     buffer: template.buffer,
     recurrence: template.recurrence,
     steps: template.steps.map(encodeStep),
+    ...(template.commute ? { commute: { ...template.commute } } : {}),
   };
 }
 
@@ -309,6 +311,7 @@ export function encodeSnapshot(snapshot: RoutineSnapshot): string {
 function decodeStep(raw: unknown): RoutineStep {
   const obj = requireObject(raw, 'step');
   return createStep({
+    ...(obj.commute ? { commute: decodeCommute(obj.commute) } : {}),
     id: requiredString(obj.id, 'step.id'),
     title: requiredString(obj.title, 'step.title'),
     // prompt 在 Swift 里非可选；旧数据若缺失，回落默认值。
@@ -339,7 +342,20 @@ function decodeTemplate(raw: unknown): RoutineTemplate {
     buffer: requiredNumber(obj.buffer, 'template.buffer'),
     recurrence,
     steps: rawSteps.map(decodeStep),
+    ...(obj.commute ? { commute: decodeCommute(obj.commute) } : {}),
   });
+}
+
+function decodeCommute(raw: unknown): NonNullable<RoutineTemplate['commute']> {
+  const obj = requireObject(raw, 'commute');
+  return {
+    address: requiredString(obj.address, 'commute.address'),
+    location: requiredString(obj.location, 'commute.location'),
+    origin: requiredString(obj.origin, 'commute.origin'),
+    mode: requiredEnum(obj.mode, ['driving', 'walking', 'transit'] as const, 'commute.mode'),
+    seconds: requiredNumber(obj.seconds, 'commute.seconds'),
+    polyline: requiredString(obj.polyline, 'commute.polyline'),
+  };
 }
 
 function decodeProgress(raw: unknown): StepProgress {

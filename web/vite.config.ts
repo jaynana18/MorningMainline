@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import vue from '@vitejs/plugin-vue';
 
 // P0 只跑 vitest（读取 vitest.config.ts）；此配置为 P1 接入视图层预留标准 Vite 工程。
@@ -7,8 +7,24 @@ import vue from '@vitejs/plugin-vue';
 // Vite 默认的 `base: '/'` 会把资源写成 `/assets/xxx.js` 这种绝对路径，
 // 在 `file://` 下解析到文件系统根 → 404 → 白屏。改成相对路径后，引用变成 `./assets/xxx.js`，
 // 相对 index.html 所在目录解析，`file://` 下才能正确加载。
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), 'VITE_');
+  const httpsHost = env.VITE_DEV_HTTPS_URL ? new URL(env.VITE_DEV_HTTPS_URL).hostname : undefined;
+  return {
   base: './',
+  server: {
+    host: '0.0.0.0',
+    port: 5174,
+    strictPort: true,
+    // 只允许配置的 HTTPS 域名，不放开所有 Host。
+    allowedHosts: httpsHost ? [httpsHost] : [],
+    proxy: {
+      '/api/account/': { target: 'http://127.0.0.1:8788' },
+      '/api/model/': {
+        target: 'http://127.0.0.1:8787',
+      },
+    },
+  },
   plugins: [
     vue(),
     {
@@ -33,4 +49,5 @@ export default defineConfig({
       },
     },
   },
+  };
 });

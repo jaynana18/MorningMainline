@@ -1,6 +1,19 @@
 <template>
   <div class="app-shell">
-    <router-view />
+    <p v-if="!account.ready" class="mm-hint" style="padding: 24px">正在连接账号…</p>
+    <AccountView v-else-if="!account.user" />
+    <template v-else>
+      <div class="mm-row" style="padding: 8px 16px; font-size: 12px">
+        <span>{{ account.user.username }} · {{ account.status || '正在同步…' }}</span>
+        <button class="mm-btn mm-btn--secondary" @click="logout">退出账号</button>
+      </div>
+      <div v-if="account.conflict" class="mm-section">
+        <p>另一台设备有新数据。本机改动已保留，请选择此次保留哪一份：</p>
+        <button class="mm-btn mm-btn--secondary" @click="resolveConflict('cloud')">使用服务器数据</button>
+        <button class="mm-btn mm-btn--secondary" @click="resolveConflict('local')">用本机数据替换服务器</button>
+      </div>
+      <router-view />
+    </template>
 
     <!--
       P3 应用内提醒弹窗（前台唯一提醒通道）。
@@ -29,15 +42,25 @@ import { useRoutineStore } from './stores/routine';
 import { useRemindersStore } from './stores/reminders';
 import ReminderOverlay from './views/reminder/ReminderOverlay.vue';
 import { resolveFocusAction } from './views/reminder/helpers';
+import AccountView from './views/AccountView.vue';
+import { account, accountRequest, loadAccount } from './platform/account';
 
 const store = useRoutineStore();
 const reminders = useRemindersStore();
 const router = useRouter();
 
-onMounted(() => {
-  void store.init();
-  void reminders.start();
+onMounted(async () => {
+  await loadAccount();
+  if (account.user) { await store.init(); void reminders.start(); }
 });
+function resolveConflict(choice: string): void { window.dispatchEvent(new CustomEvent('mm-resolve-sync', { detail: choice })); }
+async function logout(): Promise<void> {
+  try {
+    await accountRequest('/logout', 'POST', {});
+    localStorage.removeItem('mm-account-user');
+    window.location.reload();
+  } catch { account.status = '退出失败，请连接网络后重试'; }
+}
 
 onUnmounted(() => {
   reminders.stop();

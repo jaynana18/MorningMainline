@@ -13,7 +13,7 @@ import { getZonedComponents, setHoursInTz } from './serialization';
 const STEP_PATTERN_SOURCE = '([^|\\d]+?)\\s*(\\d+(?:\\.5)?)\\s*(小时|h|H|分钟|分)';
 
 /** 时间锚点词（截止节点可能前后出现这些词）。 */
-const DEADLINE_ANCHORS = ['结束', '出门', '截止', '完成', '到期'];
+const DEADLINE_ANCHORS = ['结束', '出门', '截止', '完成', '到期', '到达', '到'];
 const ANCHOR_ALTERNATION = DEADLINE_ANCHORS.join('|');
 
 const CHINESE_DIGITS: Readonly<Record<string, number>> = {

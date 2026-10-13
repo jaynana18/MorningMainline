@@ -9,6 +9,7 @@
  */
 
 import type { RoutineSession, RoutineSnapshot, ParseResult, DeviceRole } from '../core/types';
+import { randomUUID } from '../core/types';
 import { decodeSnapshot, encodeSnapshot } from '../core/serialization';
 import type {
   BridgeCapabilities,
@@ -17,6 +18,7 @@ import type {
   PlatformBridge,
 } from './bridge';
 import { isPageForeground } from './foreground';
+import { createRemoteParsingConfiguration, RemoteRoutineParsingService } from '../core/remote';
 
 /** 键值持久化抽象：IndexedDB 可用时走 IDB，否则回落内存（单测/无 DOM 场景）。 */
 interface KeyValueStore {
@@ -158,7 +160,7 @@ export class BrowserBridge implements PlatformBridge {
     if (typeof existing === 'string' && existing !== '') {
       return { id: existing, role };
     }
-    const id = globalThis.crypto.randomUUID();
+    const id = randomUUID();
     await this.store.set(DEVICE_ID_KEY, id);
     return { id, role };
   }
@@ -219,9 +221,15 @@ export class BrowserBridge implements PlatformBridge {
     // 浏览器宿主没有原生 willPresent；前台去重由本文件的可见性判断负责。
   }
 
-  async parseWithModel(): Promise<ParseResult | null> {
-    // §7：无代理时一律返回 null，调用方回退纯规则；绝不在此暴露任何 API Key。
-    return null;
+  async parseWithModel(input: string): Promise<ParseResult | null> {
+    if (!this.modelProxyURL) return null;
+    // 复用原来的提示词、宽松解码和降级策略；凭据只由服务器注入。
+    const service = new RemoteRoutineParsingService(createRemoteParsingConfiguration({
+      endpoint: this.modelProxyURL,
+      model: 'cosmo-mind-coder',
+      timeout: 60,
+    }));
+    return service.parse(input, new Date());
   }
 
   onSnapshotChanged(): () => void {

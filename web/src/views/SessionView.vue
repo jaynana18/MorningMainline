@@ -25,13 +25,12 @@
     <main class="mm-page" style="max-width: 1180px">
       <p v-if="!session" class="mm-hint" data-testid="no-session">当前没有进行中的任务线。</p>
 
-      <div v-else class="mm-session-grid">
-        <ActiveFocusCard :now="now" />
-        <div class="mm-session-col">
-          <PlanImpactCard :now="now" />
-          <TimelineCard :now="now" :focused-progress-id="focusedProgressID" />
-        </div>
-      </div>
+      <TimelineCard
+        v-else
+        :now="now"
+        :focused-progress-id="focusedProgressID"
+        class="mm-taskline-screen"
+      />
     </main>
 
     <!-- 结束确认（对应 .confirmationDialog，111–122） -->
@@ -66,9 +65,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useRoutineStore } from '../stores/routine';
 import { useRemindersStore, type FocusRequest } from '../stores/reminders';
-import ActiveFocusCard from './session/ActiveFocusCard.vue';
 import CompletionResultOverlay from './session/CompletionResultOverlay.vue';
-import PlanImpactCard from './session/PlanImpactCard.vue';
 import TimelineCard from './session/TimelineCard.vue';
 import { makeCompletionResult, type CompletionResult } from './session/helpers';
 import { useNow } from './session/useNow';

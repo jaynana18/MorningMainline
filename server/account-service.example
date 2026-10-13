@@ -1,0 +1,21 @@
+[Unit]
+Description=MorningMainline personal accounts and sync
+After=network.target
+
+[Service]
+User=www-data
+WorkingDirectory=/opt/morning-mainline-account
+EnvironmentFile=/opt/morning-mainline-account/.env.account
+ExecStart=/opt/morning-mainline-model/node/bin/node /opt/morning-mainline-account/account-server.mjs
+Restart=on-failure
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/opt/morning-mainline-account/data
+MemoryMax=192M
+CPUQuota=25%
+
+[Install]
+WantedBy=multi-user.target

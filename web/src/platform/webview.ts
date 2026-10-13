@@ -15,7 +15,7 @@
  */
 
 import type { ParseResult, ParseSource, RoutineSession, RoutineSnapshot, RoutineStep } from '../core/types';
-import { createStep, makeParseResult } from '../core/types';
+import { createStep, makeParseResult, randomUUID } from '../core/types';
 import { decodeSnapshot, encodeSnapshot, refSecondsToMs } from '../core/serialization';
 import { createBrowserBridge } from './browser';
 import type {
@@ -190,7 +190,7 @@ export class WebViewBridge implements PlatformBridge {
         return;
       }
 
-      const id = globalThis.crypto.randomUUID();
+      const id = randomUUID();
       const timer = setTimeout(() => {
         this.pending.delete(id);
         reject(new Error(`原生桥调用超时：${method}`));

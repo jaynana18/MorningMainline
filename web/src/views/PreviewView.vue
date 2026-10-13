@@ -9,7 +9,9 @@
         <button class="mm-btn mm-btn--secondary" @click="goBack">任务线</button>
       </span>
       <span class="mm-title">{{ activeTemplate.name }}</span>
-      <span class="mm-toolbar__side mm-toolbar__side--end"></span>
+      <span class="mm-toolbar__side mm-toolbar__side--end">
+        <button class="mm-btn mm-btn--secondary" @click="router.push('/create?edit=1')">一句话修改</button>
+      </span>
     </header>
 
     <main class="mm-page" style="max-width: 1120px">

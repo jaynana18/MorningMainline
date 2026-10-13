@@ -81,6 +81,16 @@ struct RoutineStep: Identifiable, Codable, Hashable, Sendable {
     }
 }
 
+/// 路线附属信息，仅用于预览和跳转，不参与任务时间线计算。Key 不持久化。
+struct CommuteInfo: Codable, Hashable, Sendable {
+    var address: String
+    var location: String
+    var origin: String
+    var mode: String
+    var seconds: TimeInterval
+    var polyline: String
+}
+
 struct RoutineTemplate: Identifiable, Codable, Hashable, Sendable {
     let id: UUID
     var name: String
@@ -92,6 +102,7 @@ struct RoutineTemplate: Identifiable, Codable, Hashable, Sendable {
     /// 可选是为了兼容旧版本已经保存在本机和 iCloud 的任务线。
     var recurrence: RoutineRecurrence?
     var steps: [RoutineStep]
+    var commute: CommuteInfo? = nil
 
     init(
         id: UUID = UUID(),

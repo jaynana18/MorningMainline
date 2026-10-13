@@ -1,0 +1,1906 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>任务线原型 · MorningMainline</title>
+<style>
+:root{
+  --bg:#F7F6F3; --card:#FFFFFF; --line:#E5E3DD;
+  --t1:#1F1E1C; --t2:#6B6960; --t3:#9C9A92;
+  --blue:#185FA5; --blue-bg:#E6F1FB; --blue-dk:#0C447C;
+  --amber:#BA7517; --amber-bg:#FAEEDA; --amber-dk:#633806;
+  --green:#0F6E56; --green-bg:#E1F5EE; --green-bd:#9FE1CB;
+  --red:#E24B4A; --red-bg:#FCEBEB; --red-bd:#F7C1C1; --red-dk:#A32D2D;
+  --purple:#7F77DD; --purple-bg:#EEEDFE; --purple-dk:#3C3489; --purple-bd:#CECBF6;
+  --grey-bg:#F1EFE8;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{
+  margin:0;background:var(--bg);color:var(--t1);
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",Arial,sans-serif;
+  display:flex;justify-content:center;padding:18px 14px 118px;
+}
+.phone{width:100%;max-width:420px}
+
+/* ---------- header ---------- */
+.hdr{margin-bottom:10px}
+.hd-row{display:flex;align-items:center;gap:7px;margin-bottom:9px}
+.hd-title{font-size:15px;font-weight:500}
+.tag{font-size:10px;padding:2px 7px;border-radius:20px}
+.tag.back{color:var(--blue-dk);background:var(--blue-bg)}
+.tag.fwd{color:var(--amber-dk);background:var(--amber-bg)}
+.tag.day{color:var(--t2);background:var(--grey-bg)}
+
+.startbox{margin:3px 0 11px}
+.startbox .k{font-size:11px;color:var(--t2)}
+.startbox .v{font-size:38px;line-height:1.05;font-weight:600;letter-spacing:-1.5px;color:var(--blue-dk);font-variant-numeric:tabular-nums}
+.startbox .sub{font-size:11px;color:var(--t3);margin-top:4px}
+.outbox{display:flex;align-items:flex-end;gap:8px;padding:9px 10px;background:var(--card);border:0.5px solid var(--line);border-radius:10px}
+.outbox .col{display:flex;flex-direction:column;gap:1px}
+.outbox .k{font-size:10px;color:var(--t3)}
+.outbox .v{font-size:20px;font-weight:500;letter-spacing:-.5px;font-variant-numeric:tabular-nums;line-height:1.1}
+.outbox .v.target{color:var(--t1)}
+.outbox .v.est.ok{color:var(--green)}
+.outbox .v.est.bad{color:var(--red-dk)}
+.outbox .tgt{font-size:20px;font-weight:500;color:var(--t2);font-variant-numeric:tabular-nums;line-height:1.3}
+.outbox .mid{flex:1}
+.outbox .arrow{font-size:13px;color:var(--t3);padding-bottom:5px}
+.delta{font-size:11px;padding:3px 9px;border-radius:20px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.delta.good{color:var(--green);background:var(--green-bg)}
+.delta.bad{color:var(--red-dk);background:var(--red-bg)}
+
+/* 模拟时钟 */
+.sim{margin-top:10px;padding:9px 11px;background:var(--purple-bg);border:0.5px solid var(--purple-bd);border-radius:10px}
+.sim .row{display:flex;align-items:center;gap:7px}
+.sim .lab{font-size:10px;color:var(--purple-dk);flex:none;letter-spacing:.3px}
+.sim input[type=time]{
+  font-family:inherit;font-size:14px;font-variant-numeric:tabular-nums;font-weight:500;
+  color:var(--purple-dk);background:#fff;border:0.5px solid var(--purple-bd);
+  border-radius:7px;padding:4px 6px;width:104px;
+}
+.sim .play{
+  width:30px;height:28px;border-radius:7px;border:0;cursor:pointer;flex:none;
+  background:var(--purple);color:#fff;font-size:12px;line-height:1;
+  display:flex;align-items:center;justify-content:center;padding:0;
+}
+.sim .play.on{background:var(--purple-dk)}
+.sim .sp{flex:1}
+.sim .spd{display:flex;gap:2px;background:rgba(255,255,255,.6);border-radius:7px;padding:2px}
+.sim .spd button{
+  font-family:inherit;font-size:10px;padding:3px 7px;border:0;border-radius:5px;
+  background:transparent;color:var(--purple-dk);cursor:pointer;
+}
+.sim .spd button.on{background:var(--purple);color:#fff}
+.sim .nb{
+  font-family:inherit;font-size:10px;padding:4px 8px;border-radius:6px;cursor:pointer;
+  border:0.5px solid var(--purple-bd);background:#fff;color:var(--purple-dk);flex:none;
+}
+.sim .nb.ok{background:var(--green-bg);border-color:var(--green-bd);color:var(--green)}
+.sim .hint{font-size:10px;color:var(--purple);margin-top:6px;line-height:1.5}
+.settings{margin-top:8px}
+.settings summary{font-size:11px;color:var(--t2);cursor:pointer;padding:7px 10px;background:var(--card);border:0.5px solid var(--line);border-radius:9px;list-style:none}
+.settings summary::-webkit-details-marker{display:none}
+.settings summary::after{content:'⌄';float:right;color:var(--t3)}
+.settings[open] summary::after{content:'⌃'}
+
+/* 提醒模式 */
+.modes{display:flex;gap:6px;margin-top:8px}
+.mode{
+  flex:1;padding:7px 9px;border-radius:9px;cursor:pointer;
+  background:var(--card);border:0.5px solid var(--line);
+}
+.mode.on{background:#FFFBFB;border-color:var(--red-bd)}
+.mode.on.silent{background:var(--green-bg);border-color:var(--green-bd)}
+.mode .t{font-size:11.5px;font-weight:500;display:flex;align-items:center;gap:4px}
+.mode .d{font-size:9.5px;color:var(--t3);margin-top:2px;line-height:1.4}
+.mode.on .t{color:var(--red-dk)}
+.mode.on.silent .t{color:var(--green)}
+
+.brow{display:flex;align-items:center;gap:8px;margin-top:8px;padding:7px 10px;background:var(--card);border:0.5px solid var(--line);border-radius:10px}
+.brow .bl{font-size:12px;color:var(--t2);flex:none}
+.brow .sp{flex:2}
+.stepper{display:flex;align-items:center;gap:2px;background:var(--bg);border-radius:8px;padding:2px}
+.stepper button{width:24px;height:24px;border:0;border-radius:6px;background:transparent;color:var(--t2);font-size:15px;line-height:1;cursor:pointer;padding:0;display:flex;align-items:center;justify-content:center}
+.stepper button:hover{background:var(--line);color:var(--t1)}
+.stepper button:disabled{opacity:.3;cursor:default}
+.stepper .v{min-width:50px;text-align:center;font-size:12px;font-weight:500;font-variant-numeric:tabular-nums}
+.brow.meta{margin-top:6px;display:block;padding:8px 10px;font-size:11px;line-height:1.7}
+.brow.meta .k{color:var(--t3)}
+.brow.meta .v{font-variant-numeric:tabular-nums;color:var(--t2)}
+.brow.meta .good{color:var(--green);font-weight:500}
+.brow.meta .bad{color:var(--red-dk);font-weight:500}
+
+.status{display:flex;align-items:flex-start;gap:7px;font-size:12px;padding:9px 12px;border-radius:10px;margin:10px 0 8px;line-height:1.5}
+.status.ok{background:var(--green-bg);color:var(--green);border:0.5px solid var(--green-bd)}
+.status.warn{background:var(--amber-bg);color:var(--amber-dk);border:0.5px solid #EFCB8E}
+.status.bad{background:var(--red-bg);color:var(--red-dk);border:0.5px solid var(--red-bd)}
+.status .dot{width:6px;height:6px;border-radius:50%;flex:none;background:currentColor;margin-top:5px}
+.status b{font-weight:500}
+.status .mono{font-variant-numeric:tabular-nums}
+
+.deg{border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;line-height:1.55}
+.deg.bad{background:var(--red-bg);border:0.5px solid var(--red-bd)}
+.deg-h{font-weight:500;color:var(--red-dk);margin-bottom:6px}
+.deg-b{color:var(--t1);margin-bottom:4px}
+.deg-b em{font-style:normal;color:var(--red-dk);font-weight:500}
+.deg-b code{background:#fff;padding:1px 4px;border-radius:3px;font-size:10.5px;color:var(--red-dk)}
+.deg-b.sub{color:var(--t2);font-size:11.5px}
+.deg-tip{font-size:10px;color:var(--t3);margin-top:7px;line-height:1.5}
+.deg-a{display:flex;gap:6px;margin-top:9px;flex-wrap:wrap}
+.deg-a button{font-family:inherit;font-size:11px;padding:6px 11px;border-radius:7px;cursor:pointer;border:0.5px solid var(--red-bd);background:var(--card);color:var(--red-dk)}
+.deg-a button:hover{opacity:.85}
+.deg-skip{margin-top:8px;padding-top:8px;border-top:0.5px solid var(--red-bd);color:var(--t2);font-size:11px}
+.deg-skip .row{display:flex;align-items:center;gap:6px;margin-top:4px}
+.deg-skip .row s{flex:1;color:var(--t3)}
+.deg-skip .row button{font-family:inherit;font-size:10px;padding:3px 8px;border-radius:6px;cursor:pointer;border:0.5px solid var(--line);background:var(--card);color:var(--t2)}
+.deg.none{display:none}
+
+/* ---------- timeline ---------- */
+.stage{position:relative;transition:height .18s ease;overflow:visible}
+.stage.anim .band{transition:top .18s cubic-bezier(.2,.8,.3,1),height .18s ease}
+
+.flowed{position:absolute;left:66px;right:12px;top:0;background:rgba(226,75,74,.035);border-radius:9px;pointer-events:none;z-index:0}
+
+.band{position:absolute;left:70px;right:12px;touch-action:none;user-select:none;z-index:2}
+
+.band.single{border-radius:9px;background:var(--card);border:0.5px solid var(--line);display:flex;align-items:center;gap:6px;padding:0 8px 0 11px;cursor:grab;overflow:hidden}
+.band.single.selected{border-color:var(--blue);border-width:1px}
+.band.single.pending-dim{opacity:.72}
+
+/* 当前任务：强高亮 */
+.band.single.running{
+  background:#F4F9FF;border:1px solid var(--blue);
+  box-shadow:0 2px 10px rgba(24,95,165,.12);
+  padding-left:14px;
+}
+.band.single.running::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--blue)}
+.band.single.overdue{padding-left:14px}
+.band.single.overdue::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px}
+.band.single.overdue.urgency-low{background:#FFF9F2;border:1px solid #E8A15A;box-shadow:0 2px 8px rgba(186,117,23,.10)}
+.band.single.overdue.urgency-low::before{background:#D98A32}
+.band.single.overdue.urgency-mid{background:#FFF3F1;border:1px solid #E8736F;box-shadow:0 2px 9px rgba(226,75,74,.12)}
+.band.single.overdue.urgency-mid::before{background:#E8736F}
+.band.single.overdue.urgency-high{background:#FCEBEB;border:1px solid var(--red-dk);box-shadow:0 2px 12px rgba(163,45,45,.18)}
+.band.single.overdue.urgency-high::before{background:var(--red-dk)}
+
+.band.single.done{background:var(--grey-bg);border-color:#E5E3DD}
+.band.single.done .b-title{color:var(--t3);text-decoration:line-through;text-decoration-color:#C9C7BF}
+.band.single.done .b-dot{background:#C9C7BF}
+.band.single.done .b-dur{color:#C9C7BF}
+.band.single.unconfirmed{background:#FFF9EE;border-color:#EFCB8E}
+.band.single.unconfirmed .b-title{color:var(--amber-dk)}
+.band.single.unconfirmed .b-dot{background:var(--amber)}
+.band.single.unconfirmed .chk{border-color:var(--amber);color:var(--amber);background:#fff}
+.confirm-chip{font-family:inherit;font-size:9px;padding:3px 7px;border-radius:6px;border:0.5px solid #EFCB8E;background:#fff;color:var(--amber-dk);cursor:pointer;white-space:nowrap;flex:none}
+
+/* 固定安全垫：跟着任务整体移动，但自身时长永远不被延误扣减 */
+.band.bufferband{
+  border:1px dashed #B8B5AA;border-radius:9px;
+  background:repeating-linear-gradient(-45deg,#F7F6F3,#F7F6F3 7px,#EEECE5 7px,#EEECE5 14px);
+  display:flex;align-items:center;justify-content:center;color:var(--t2);
+  font-size:11px;font-weight:500;z-index:1;
+}
+.band.bufferband .b-lock{margin-right:5px;font-size:12px}
+.band.bufferband .tlabel .a{color:var(--t2)}
+
+/* deadline 块：深色，最醒目 */
+.band.single.deadlineband{
+  background:var(--t1);border:1px solid var(--t1);border-radius:9px;
+  padding-left:12px;opacity:1;
+}
+.band.single.deadlineband .b-title{color:#fff;font-weight:500;font-size:13.5px}
+.band.single.deadlineband .b-dot{background:#FAC775;width:6px;height:6px}
+.band.single.deadlineband .b-flag{font-size:13px;line-height:1;flex:none;color:#FAC775}
+.band.single.deadlineband .b-due .u{color:rgba(255,255,255,.92);font-weight:500;font-size:12px}
+.band.single.deadlineband.missed{background:var(--red-dk);border-color:var(--red-dk)}
+
+.band.single .b-title{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.band.single .b-dur{font-size:11px;color:var(--t3);flex:none;font-variant-numeric:tabular-nums}
+.band.single .b-dur em.cut{font-style:normal;font-size:9px;color:var(--amber-dk);background:var(--amber-bg);padding:1px 5px;border-radius:20px;margin-left:4px;white-space:nowrap}
+.band.single .b-due{margin-left:auto;flex:none;display:flex;align-items:center;gap:5px}
+.band.single .b-due .u{font-size:11px;color:var(--blue);font-variant-numeric:tabular-nums}
+.band.single .b-due .lag{font-size:9px;color:var(--red-dk);background:var(--red-bg);padding:1px 5px;border-radius:20px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.band.single .b-due .gain{font-size:9px;color:var(--green);background:var(--green-bg);padding:1px 5px;border-radius:20px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.band.single .b-live{font-size:9px;color:#fff;background:var(--blue);padding:1px 6px;border-radius:20px;display:flex;align-items:center;gap:4px;flex:none;white-space:nowrap}
+.band.single .b-live.warn{background:var(--red)}
+.band.single .b-live.warn.urgency-low{background:#D98A32}
+.band.single .b-live.warn.urgency-mid{background:#E8736F}
+.band.single .b-live.warn.urgency-high{background:var(--red-dk)}
+.band.single .b-live i{width:4px;height:4px;border-radius:50%;background:#fff;animation:pulse 1.3s ease-in-out infinite}
+.band.single .b-dot{width:5px;height:5px;border-radius:50%;background:var(--green);flex:none}
+.band.single.temp{background:var(--purple-bg);border:0.5px dashed var(--purple)}
+.band.single.temp .b-title{color:var(--purple-dk)}
+
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(1.6)}}
+
+.chk{
+  width:18px;height:18px;border-radius:50%;flex:none;padding:0;
+  border:1.5px solid #D3D1C7;background:var(--card);
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  color:transparent;font-size:10px;line-height:1;transition:background .12s,border-color .12s;
+}
+.chk:hover{border-color:var(--green);color:#9FE1CB}
+.chk.done{background:var(--green);border-color:var(--green);color:#fff}
+.band.single.deadlineband .chk{display:none}
+
+.band.group{display:flex;gap:5px;padding:0;align-items:flex-start;cursor:grab}
+.band.group .lane{flex:1;min-width:0;display:flex;flex-direction:column}
+.band.group .lt{background:var(--card);border:0.5px solid #E8D9BE;border-radius:7px;padding:5px 7px;overflow:hidden;display:flex;flex-direction:column;justify-content:center;position:relative}
+.band.group .lt.running{background:#F4F9FF;border:1px solid var(--blue);box-shadow:0 2px 10px rgba(24,95,165,.12)}
+.band.group .lt.running::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--blue)}
+.band.group .lt.overdue::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px}
+.band.group .lt.overdue.urgency-low{background:#FFF9F2;border:1px solid #E8A15A}
+.band.group .lt.overdue.urgency-low::before{background:#D98A32}
+.band.group .lt.overdue.urgency-mid{background:#FFF3F1;border:1px solid #E8736F}
+.band.group .lt.overdue.urgency-mid::before{background:#E8736F}
+.band.group .lt.overdue.urgency-high{background:#FCEBEB;border:1px solid var(--red-dk)}
+.band.group .lt.overdue.urgency-high::before{background:var(--red-dk)}
+.band.group .lt.done{background:var(--grey-bg);border-color:#E5E3DD}
+.band.group .lt.done .n{color:var(--t3);text-decoration:line-through}
+.band.group .lt.done .d2{color:#C9C7BF}
+.band.group .lt.unconfirmed{background:#FFF9EE;border-color:#EFCB8E}
+.band.group .lt.unconfirmed .n{color:var(--amber-dk)}
+.band.group .lt.unconfirmed .chk{border-color:var(--amber);color:var(--amber);background:#fff}
+.band.group .lt .row1{display:flex;align-items:center;gap:5px;min-width:0}
+.band.group .lt .n{font-size:12px;font-weight:500;color:var(--amber-dk);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.band.group .lt .n .d{font-weight:400;color:var(--amber);font-size:10px;margin-left:4px;font-variant-numeric:tabular-nums}
+.band.group .lt .d2{font-size:10px;color:var(--amber);margin-top:2px;font-variant-numeric:tabular-nums;padding-left:21px}
+.band.group .lt .chk{width:16px;height:16px;border-width:1.4px}
+.band.group .lw{border:0.5px dashed #DACAA9;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--amber);font-variant-numeric:tabular-nums;background:rgba(250,238,218,.4)}
+
+.tlabel{position:absolute;left:-66px;width:60px;text-align:right;top:50%;transform:translateY(-50%);font-variant-numeric:tabular-nums;letter-spacing:-0.2px}
+.tlabel .a{font-size:10px;color:var(--blue);display:block}
+.tlabel .p{font-size:9px;color:var(--t3);display:block;margin-top:1px}
+.tlabel .a.only{color:var(--t3)}
+.tlabel.dl .a{color:var(--t1);font-weight:500}
+.tlabel.dl .p{color:var(--red-dk)}
+
+.ghost{position:absolute;left:70px;right:12px;height:0;border-top:1px dashed #C9C7BF;z-index:1;pointer-events:none}
+.ghost span{position:absolute;right:0;top:-14px;font-size:9px;color:var(--t3);background:var(--bg);padding:0 3px;font-variant-numeric:tabular-nums}
+
+.pslot{position:absolute;border:1px dashed var(--amber);border-radius:9px;background:rgba(250,238,218,.55);z-index:1;display:none;pointer-events:none;align-items:center;justify-content:center}
+.pslot span{font-size:10px;color:var(--amber-dk)}
+
+.act{flex:none;width:22px;height:22px;border-radius:6px;border:0.5px solid var(--line);background:var(--card);color:var(--t3);font-size:12px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
+.act:hover{border-color:var(--t3);color:var(--t1)}
+.band.group .act.close{position:absolute;right:3px;top:3px;z-index:3;width:18px;height:18px;font-size:10px;background:var(--bg);border-color:#E8D9BE;color:var(--amber)}
+.band.dragging{z-index:20;cursor:grabbing}
+.band.dragging .lt,.band.dragging.single{box-shadow:0 8px 22px rgba(0,0,0,.15)}
+.band.lane-hint .lt{border-color:var(--amber);border-style:dashed}
+
+.nowline{position:absolute;left:66px;right:12px;height:22px;transform:translateY(-11px);cursor:ns-resize;touch-action:none;z-index:15}
+.nowline i{position:absolute;left:0;right:0;top:50%;height:1.5px;background:var(--red);transform:translateY(-50%);display:block}
+.nowline i::after{
+  content:'';position:absolute;left:-4px;top:50%;margin-top:-4px;
+  width:8px;height:8px;border-radius:50%;background:var(--red);
+}
+.nowline.live i::after{animation:pulse 1.5s ease-in-out infinite}
+.nowline b{position:absolute;left:-66px;width:60px;text-align:right;top:50%;transform:translateY(-50%);font-size:10px;font-weight:500;color:var(--red);font-variant-numeric:tabular-nums;background:var(--bg);padding:1px 0}
+
+.drop{position:absolute;left:70px;right:12px;height:2px;background:var(--blue);border-radius:2px;z-index:9;display:none}
+.drop::before{content:'';position:absolute;left:-4px;top:-3px;width:8px;height:8px;border-radius:50%;background:var(--blue)}
+
+.hintbar{position:fixed;left:50%;bottom:112px;transform:translateX(-50%);font-size:11.5px;padding:7px 13px;border-radius:20px;background:rgba(31,30,28,.9);color:#fff;white-space:nowrap;opacity:0;transition:opacity .15s;pointer-events:none;z-index:99}
+.hintbar.on{opacity:1}
+
+/* 通知堆叠 */
+.notices{position:fixed;top:14px;left:50%;transform:translateX(-50%);width:calc(100% - 28px);max-width:392px;z-index:100;display:flex;flex-direction:column;gap:6px;pointer-events:none}
+.notice{
+  background:rgba(31,30,28,.94);color:#fff;border-radius:11px;padding:9px 13px;
+  font-size:12px;line-height:1.45;display:flex;gap:8px;align-items:flex-start;
+  animation:slidein .2s ease-out;
+}
+.notice.warn{background:rgba(163,45,45,.96)}
+.notice.ok{background:rgba(15,110,86,.96)}
+.notice .nt{font-weight:500}
+.notice .nb{opacity:.82;font-size:11px;margin-top:1px}
+@keyframes slidein{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+
+.prompt{margin-top:14px;padding:10px 12px;background:var(--purple-bg);border-radius:10px;font-size:12px;color:var(--purple-dk);line-height:1.5;display:none}
+.prompt.on{display:block}
+.prompt .t{font-weight:500;margin-bottom:2px}
+.prompt .st{font-size:10px;color:var(--purple);margin-top:5px}
+.prompt .durbar{display:flex;align-items:center;gap:8px;margin-top:9px;padding-top:9px;border-top:0.5px solid var(--purple-bd)}
+.prompt .durbar .k{font-size:11px;color:var(--purple-dk);flex:none}
+.prompt .durbar .stepper{background:#fff}
+.prompt .durbar .stepper .v{min-width:56px;font-size:11px;color:var(--purple-dk)}
+.prompt .durbar .stepper .v i{font-style:normal;color:var(--t3);font-weight:400;font-size:10px;margin-left:3px}
+.prompt .durbar .rst{font-family:inherit;font-size:10px;padding:4px 9px;margin-left:auto;border-radius:6px;cursor:pointer;border:0.5px solid var(--purple-bd);background:transparent;color:var(--purple-dk)}
+.prompt .durbar .rst:disabled{opacity:.35;cursor:default}
+.prompt .laneact{font-family:inherit;font-size:10px;padding:5px 9px;margin-top:7px;border-radius:6px;cursor:pointer;border:0.5px solid var(--purple-bd);background:#fff;color:var(--purple-dk)}
+.prompt .laneact:disabled{display:none}
+
+.ftr{margin-top:16px;padding-top:14px;border-top:0.5px solid var(--line);font-size:11px;color:var(--t3);line-height:1.9}
+.ftr kbd{font-family:inherit;background:var(--card);border:0.5px solid var(--line);border-radius:4px;padding:1px 5px;font-size:10px;color:var(--t2)}
+.legend{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+.legend span{display:flex;align-items:center;gap:5px}
+.legend i{width:9px;height:9px;border-radius:3px;display:block}
+.note{margin-top:10px;font-size:10px;color:var(--t3);line-height:1.75}
+.note code{background:var(--grey-bg);padding:1px 4px;border-radius:3px;font-size:10px}
+
+/* 执行时常驻的最小操作区 */
+.dock{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);width:calc(100% - 28px);max-width:392px;background:rgba(255,255,255,.96);border:1px solid var(--line);box-shadow:0 8px 28px rgba(31,30,28,.14);border-radius:14px;padding:10px 11px;z-index:60;backdrop-filter:blur(14px)}
+.dock .dock-meta{display:flex;align-items:baseline;gap:7px;margin-bottom:8px;min-width:0}
+.dock .dock-title{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dock .dock-sub{font-size:10px;color:var(--t3);margin-left:auto;white-space:nowrap}
+.dock .dock-actions{display:flex;gap:6px}
+.dock button{font-family:inherit;border-radius:8px;padding:8px 11px;border:0.5px solid var(--line);background:var(--card);color:var(--t2);font-size:11px;cursor:pointer;flex:1}
+.dock button.primary{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:500}
+.dock button:disabled{opacity:.4;cursor:default}
+</style>
+</head>
+<body>
+<div class="notices" id="notices"></div>
+
+<div class="phone">
+
+  <div class="hdr">
+    <div class="hd-row">
+      <span class="hd-title" id="tplName">上班早晨</span>
+      <span class="tag back" id="tplMode">倒推</span>
+      <span class="tag day" id="tplRec">每天</span>
+    </div>
+
+    <div class="startbox">
+      <div class="k" id="startLabel">最晚必须开始</div>
+      <div class="v" id="latestStart">8:00</div>
+      <div class="sub" id="startHint">现在还可以自由安排 8 分钟</div>
+    </div>
+
+    <div class="outbox">
+      <div class="col">
+        <span class="k">预计出门</span>
+        <span class="v est ok" id="estOut">8:35</span>
+      </div>
+      <span class="arrow" style="align-self:flex-end">→</span>
+      <div class="col">
+        <span class="k">目标</span>
+        <span class="v tgt target" id="tgtOut">8:35</span>
+      </div>
+      <span class="mid"></span>
+      <span class="delta good" id="deltaBadge">准点</span>
+    </div>
+
+    <!-- 模拟时钟（原型专用） -->
+    <div class="sim">
+      <div class="row">
+        <span class="lab">模拟现在</span>
+        <input type="time" id="simTime" step="1" value="07:52:00">
+        <button class="play" id="playBtn" title="开始流动">▶</button>
+        <span class="sp"></span>
+        <span class="spd" id="spdBox">
+          <button data-spd="1" class="on">1×</button>
+          <button data-spd="10">10×</button>
+          <button data-spd="60">60×</button>
+        </span>
+        <button class="nb" id="nbBtn">通知</button>
+      </div>
+      <div class="hint" id="simHint">时间静止中 · 点 ▶ 让时间流动，红线会随时间下移</div>
+    </div>
+
+    <details class="settings">
+      <summary>提醒、机动与进度</summary>
+
+    <!-- 提醒模式 -->
+    <div class="modes" id="modeBox">
+      <div class="mode silent on" data-mode="silent">
+        <div class="t">静默推进</div>
+        <div class="d">到点进入下一项，上一项留待确认</div>
+      </div>
+      <div class="mode" data-mode="strict">
+        <div class="t">强提醒</div>
+        <div class="d">不自动打勾，每 2 分钟催一次</div>
+      </div>
+    </div>
+
+    <div class="brow">
+      <span class="bl">机动时间</span>
+      <span class="sp"></span>
+      <span class="stepper">
+        <button id="bMinus" title="减少 1 分钟">−</button>
+        <span class="v" id="bVal">10 分钟</span>
+        <button id="bPlus" title="增加 1 分钟">+</button>
+      </span>
+    </div>
+
+    <div class="brow meta">
+      <span class="k">进度</span> <span class="v" id="mProg"></span><br>
+      <span class="k">计划</span> <span class="v" id="mPlan"></span><br>
+      <span class="k">余量</span> <span class="v" id="mSlack"></span>
+    </div>
+    </details>
+  </div>
+
+  <div class="status" id="status"></div>
+  <div class="deg none" id="degrade"></div>
+
+  <div class="stage" id="stage">
+    <div class="flowed" id="flowed"></div>
+    <div class="pslot" id="pslot"><span>松开 → 并行</span></div>
+    <div class="drop" id="drop"></div>
+  </div>
+
+  <div class="prompt" id="promptBox"></div>
+
+  <div class="ftr">
+    <div class="legend">
+      <span><i style="background:#F4F9FF;border:1px solid #185FA5"></i>当前任务</span>
+      <span><i style="background:#1F1E1C"></i>deadline</span>
+      <span><i style="background:#EEECE5;border:0.5px dashed #9C9A92"></i>固定安全垫</span>
+      <span><i style="background:#F1EFE8;border:0.5px solid #D3D1C7"></i>已完成</span>
+      <span><i style="background:#FAEEDA;border:0.5px solid #BA7517"></i>并行</span>
+    </div>
+    <div>
+      <kbd>点圆圈</kbd> 标完成 ·
+      <kbd>上下拖</kbd> 换顺序 ·
+      <kbd>往右拖</kbd> 变并行 ·
+      <kbd>单击正文</kbd> 看 prompt
+    </div>
+    <div class="note">
+      块高度 ∝ 时长，纵轴即时间轴 · 并行组取 <code>max</code>，短任务下方留等待区<br>
+      <code>lane</code> / 等待区 / 待确认 / 提醒模式均为本原型提案，Swift 模型暂无对应字段
+    </div>
+  </div>
+
+</div>
+
+<div class="dock" id="actionDock">
+  <div class="dock-meta"><span class="dock-title" id="dockTitle">准备开始</span><span class="dock-sub" id="dockSub"></span></div>
+  <div class="dock-actions" id="dockActions"></div>
+</div>
+
+<div class="hintbar" id="hintbar"></div>
+
+<script>
+/* ============================================================
+   对齐 MorningMainline/Shared/Models/RoutineModels.swift
+     RoutineStep   : title / prompt / duration / importance / role + lane（提案）
+     StepState     : pending | active | unconfirmed | completed | skipped
+     plannedDueAt   固定不改写，作对比基准
+     remainingBuffer 固定安全垫，不被延误消耗
+   本原型新增（提案）：
+     alertMode     : silent（到点自动推进，旧项待确认）| strict（不推进，每 2 分钟催）
+     simClock      模拟时钟，让时间可被拨动、可流动
+   ============================================================ */
+
+var PPM         = 16;    // 每分钟像素
+var MINH        = 40;
+var LANE_MINH   = 34;
+var GAP         = 8;
+var PARALLEL_T  = 46;
+var LANE_MAX    = 2;
+var ALERT_IV    = 2;     // 强提醒间隔（分钟）
+var RESIZE_MIN  = 2;     // 单项可压缩到的绝对下限（分钟）
+var RESIZE_PCT  = 0.5;   // 单项最多压到原时长的百分比
+var DUR_MAX     = 120;   // 单项时长上限（分钟）
+var HARD_W      = 0.6;   // hardDeadline 项在「自动压缩」里的优先级权重（越低越靠后）
+var OVERDUE_VISUAL_CAP = 5; // 超时最多再长 5 分钟的视觉高度，真实时间仍继续计算
+
+var state = {
+  template: {
+    name: '上班早晨', mode: 'backward', recurrence: 'daily',
+    deadlineHour: 8, deadlineMinute: 35,
+    buffer: 10 * 60,
+    steps: [
+      { id:1, title:'刷牙',   prompt:'先刷牙，不开新任务',              duration:3*60,  importance:'normal',       role:'task', lane:0, state:'pending' },
+      { id:2, title:'洗脸',   prompt:'现在只做：洗脸',                  duration:5*60,  importance:'normal',       role:'task', lane:0, state:'pending' },
+      { id:3, title:'弄头发', prompt:'现在只做：弄头发',                duration:10*60, importance:'normal',       role:'task', lane:0, state:'pending' },
+      { id:4, title:'装午饭', prompt:'午饭装好就下楼，不再收拾车',      duration:2*60,  importance:'normal',       role:'task', lane:0, state:'pending' },
+      { id:5, title:'下楼',   prompt:'现在下楼，安安的临时需求优先交接', duration:5*60, importance:'hardDeadline', role:'task', lane:0, state:'pending' },
+      { id:6, title:'出门',   prompt:'不预测路况，现在出门',            duration:0,     importance:'hardDeadline', role:'deadline', lane:0, state:'pending' }
+    ]
+  },
+  now: 7*60 + 52,          // 模拟时钟当前值（分钟，浮点）
+  playing: false,
+  speed: 1,
+  wallBase: 0,
+  simBase: 0,
+  alertMode: 'silent',
+  executionStarted: false,
+  executionOrigin: null,
+  selected: null,
+  layout: null
+};
+
+var stage=document.getElementById('stage'), dropEl=document.getElementById('drop');
+var pslot=document.getElementById('pslot'), flowed=document.getElementById('flowed');
+var elStatus=document.getElementById('status'), elDegrade=document.getElementById('degrade');
+var elPrompt=document.getElementById('promptBox'), elHint=document.getElementById('hintbar');
+var elNotices=document.getElementById('notices');
+
+function fmt(m){
+  m=Math.round(m);
+  var h=Math.floor(m/60), mm=m%60;
+  return h+':'+(mm<10?'0':'')+mm;
+}
+function fmtSec(m){
+  var t=Math.max(0, m);
+  var h=Math.floor(t/60), mm=Math.floor(t%60), ss=Math.floor((t*60)%60);
+  return (h<10?'0':'')+h+':'+(mm<10?'0':'')+mm+':'+(ss<10?'0':'')+ss;
+}
+function dlMin(t){ return t.deadlineHour*60 + t.deadlineMinute; }
+function taskSteps(){ return state.template.steps.filter(function(s){ return s.role==='task'; }); }
+function liveTasks(){ return taskSteps().filter(function(s){ return !s.skipped; }); }
+function plannedOf(step){ return step.duration/60; }
+function actualOf(step){ return step.actualDur != null ? step.actualDur : plannedOf(step); }
+function isSettled(step){ return step.state === 'completed' || step.state === 'unconfirmed'; }
+function visualMinutes(step, used){
+  var planned=plannedOf(step);
+  var actual=isSettled(step) ? used : Math.max(planned, used);
+  return Math.min(actual, planned + OVERDUE_VISUAL_CAP);
+}
+function urgencyClass(over){
+  if(over < 2) return 'urgency-low';
+  if(over < 5) return 'urgency-mid';
+  return 'urgency-high';
+}
+
+/* ---------- 单项时长调整（压时间） ---------- */
+function baseOf(step){ return step.baseDuration != null ? step.baseDuration : step.duration/60; }
+function floorOf(step){                       // 这一项最短能压到多少
+  var b = baseOf(step);
+  return Math.min(b, Math.max(RESIZE_MIN, Math.ceil(b * RESIZE_PCT)));
+}
+function canResize(step){                    // 当前是否还有可压余量
+  return !!step && step.role === 'task' && !isSettled(step)
+      && Math.round(step.duration/60) > floorOf(step);
+}
+function setDuration(step, minutes){
+  if(!step || step.role !== 'task' || isSettled(step)) return false;
+  var b = baseOf(step);
+  if(step.baseDuration == null) step.baseDuration = b;
+  var v = Math.max(floorOf(step), Math.min(DUR_MAX, Math.round(minutes)));
+  if(v === Math.round(step.duration/60)) return false;
+  step.duration = v*60;
+  return true;
+}
+function resetDuration(step){
+  if(!step || step.baseDuration == null) return false;
+  step.duration = Math.round(step.baseDuration)*60;
+  step.baseDuration = null;
+  return true;
+}
+function resizedSteps(){
+  return state.template.steps.filter(function(s){
+    return s.baseDuration != null && Math.round(s.duration/60) !== Math.round(s.baseDuration);
+  });
+}
+function stepByID(id){
+  return state.template.steps.filter(function(s){ return s.id === id; })[0] || null;
+}
+
+function hint(t){
+  if(!t){ elHint.classList.remove('on'); return; }
+  elHint.textContent=t; elHint.classList.add('on');
+}
+
+/* ---------- 通知 ---------- */
+var noticeSeq = 0;
+var NOTIFY_OK = false;
+
+function pushNotice(title, body, kind){
+  var el=document.createElement('div');
+  el.className='notice '+(kind||'');
+  el.innerHTML='<div><div class="nt"></div><div class="nb"></div></div>';
+  el.querySelector('.nt').textContent=title;
+  el.querySelector('.nb').textContent=body;
+  elNotices.appendChild(el);
+  setTimeout(function(){ el.remove(); }, 7000);
+
+  if(NOTIFY_OK){
+    try{ new Notification(title, { body: body, tag: 'mm-'+ (++noticeSeq) }); }catch(e){}
+  }
+}
+
+function requestNotify(){
+  if(!('Notification' in window)){ 
+    document.getElementById('nbBtn').textContent='不支持';
+    return;
+  }
+  if(Notification.permission === 'granted'){
+    NOTIFY_OK = true;
+    var b=document.getElementById('nbBtn');
+    b.className='nb ok'; b.textContent='已开启';
+    return;
+  }
+  if(Notification.permission === 'denied'){
+    var b2=document.getElementById('nbBtn');
+    b2.textContent='被拒绝';
+    return;
+  }
+  Notification.requestPermission().then(function(p){
+    NOTIFY_OK = (p === 'granted');
+    var b3=document.getElementById('nbBtn');
+    b3.className = NOTIFY_OK ? 'nb ok' : 'nb';
+    b3.textContent = NOTIFY_OK ? '已开启' : '未开启';
+  });
+}
+
+/* ---------- 泳道归并 ---------- */
+function buildBands(src){
+  var bands=[], i=0;
+  while(i < src.length){
+    var s=src[i];
+    if(s.lane === 1 && s.role === 'task') s.lane = 0;
+
+    var items=[s], j=i+1;
+    if(s.role === 'task' && s.lane !== 1){
+      while(j < src.length && src[j].lane === 1 && src[j].role === 'task'
+            && items.length < LANE_MAX){
+        items.push(src[j]); j++;
+      }
+    }
+    bands.push({ type: items.length > 1 ? 'group' : 'single', items: items });
+    i = j;
+  }
+  return bands;
+}
+
+function bandDur(b){
+  if(b.type === 'single'){
+    var s = b.items[0];
+    return isSettled(s) ? actualOf(s) : plannedOf(s);
+  }
+  return Math.max.apply(null, b.items.map(function(x){
+    return isSettled(x) ? actualOf(x) : plannedOf(x);
+  }));
+}
+function bandDone(b){ return b.items.every(isSettled); }
+
+/* 已经发生的块的真实起点（startedAt 在块第一次落位 / 被勾掉时钉住）。
+   钉住的意义是——之后不管怎么改计划、改时长、砍步骤，
+   已经走过的这段都不会在屏幕上漂移。 */
+function pinnedStart(b){
+  var cands = [];
+  for(var i=0;i<b.items.length;i++){
+    var s = b.items[i];
+    var p = s.startedAt;
+    if(p == null && isSettled(s) && s.completedAt != null && s.actualDur != null){
+      p = s.completedAt - s.actualDur;      // 兜底：没有 startedAt 记录的老数据
+    }
+    // 并行组里「还没开始的那条支线」不拖累整组定位，取已有记录里最早的那个
+    if(p != null) cands.push(p);
+  }
+  return cands.length ? Math.min.apply(null, cands) : null;
+}
+
+function computeLayout(){
+  var t = state.template;
+  var dl = dlMin(t);
+  var buffer = t.buffer/60;
+
+  var taskBands = buildBands(liveTasks());
+  taskBands.forEach(function(b){ b.dur = bandDur(b); b.done = bandDone(b); });
+
+  var remainTotal = taskBands.filter(function(b){ return !b.done; })
+                         .reduce(function(a,b){ return a + b.dur; }, 0);
+
+  var plannedStart = dl - remainTotal - buffer;
+  var axisStart = state.executionStarted && state.executionOrigin != null
+    ? state.executionOrigin : plannedStart;
+  var c1 = axisStart;
+  taskBands.forEach(function(b){
+    if(b.done && pinnedStart(b) != null){
+      b.plannedEnd = pinnedStart(b) + b.dur;
+      c1 = Math.max(c1, b.plannedEnd);
+    }
+    else { b.plannedEnd = c1 + b.dur; c1 = b.plannedEnd; }
+  });
+
+  var bufferBand = {
+    type:'buffer', items:[], dur:buffer, done:false,
+    plannedEnd:c1 + buffer
+  };
+  var dlStep = t.steps.filter(function(s){ return s.role==='deadline'; })[0];
+  var deadlineBand = {
+    type:'single', items:[dlStep], dur:0, done:false,
+    plannedEnd:dl
+  };
+  var bands = taskBands.concat(buffer > 0 ? [bufferBand] : []).concat([deadlineBand]);
+
+  // 正在做的那一项：保持原位高亮，不被 now 线推走（超时由 now 线穿过它来体现）
+  var actBand = null;
+  taskBands.forEach(function(b){
+    if(!actBand && b.items.some(function(x){ return x.state === 'active'; })) actBand = b;
+  });
+
+  var c2 = axisStart, y = 0;
+  bands.forEach(function(b){
+    b.y = y;
+
+    if(b.type === 'buffer'){
+      b.grow = 0;
+      b.logicalDur = b.dur;
+      b.vdur = b.dur;
+      b.start = c2;
+      b.end = b.start + b.dur;
+      b.vend = b.end;
+      b.h = Math.max(MINH, b.dur * PPM);
+      c2 = b.vend;
+      y += b.h + GAP;
+      return;
+    }
+
+    if(b.items[0] && b.items[0].role === 'deadline'){
+      b.grow = 0; b.logicalDur = 0; b.vdur = 0;
+      b.start = c2; b.end = c2; b.vend = c2;
+      b.h = MINH;
+      y += b.h + GAP;
+      return;
+    }
+
+    // 正在做的那一项：第一次落位时把真实起点钉住，之后不再漂移
+    if(b === actBand){
+      b.items.forEach(function(s){
+        if(s.state === 'active' && s.startedAt == null) s.startedAt = Math.max(c2, state.now);
+      });
+    }
+
+    var pin = pinnedStart(b);
+    if(pin != null){
+      // 已经发生的块（已完成 / 正在做）：位置由真实时间决定，不随剩余工作量重算而漂
+      b.start = pin;
+      b.grow  = (b === actBand) ? Math.max(0, state.now - b.start) : 0;
+      b.logicalDur = (b === actBand) ? Math.max(b.dur, b.grow) : b.dur;
+      b.vdur = Math.max.apply(null, b.items.map(function(it){
+        var used=isSettled(it) ? actualOf(it) : Math.max(plannedOf(it), b.grow);
+        return visualMinutes(it, used);
+      }));
+      b.end = b.start + b.logicalDur;
+    }else{
+      b.grow  = 0;
+      b.logicalDur = b.dur;
+      b.vdur  = b.dur;
+      b.start = Math.max(c2, state.now);   // ← 弹性顺延：不点完成，后续自动往后排队
+      b.end   = b.start + b.dur;
+    }
+    b.vend = b.start + b.vdur;             // 视觉底边
+
+    b.h = b.type==='group'
+      ? Math.max.apply(null, b.items.map(function(it){
+          var used = isSettled(it) ? actualOf(it) : Math.max(plannedOf(it), b.grow);
+          var m = visualMinutes(it, used);
+          return Math.max(LANE_MINH, m * PPM);
+        }))
+      : Math.max(MINH, b.vdur * PPM);
+
+    c2 = b.end;                            // 后续按真实时间顺延，不受视觉高度上限影响
+
+    y += b.h + GAP;
+  });
+
+  var estOut = deadlineBand.end;
+  var dlPlanned = dl;
+
+  // 余量修正：正在做的那一项只算「还没做完的部分」，
+  // 否则时间往前走 + 剩余量仍按整项计，余量会以两倍速掉，完成瞬间又弹回来。
+  var realRemain = taskBands.filter(function(b){ return !b.done; })
+                        .reduce(function(a,b){ return a + Math.max(0, b.dur - b.grow); }, 0);
+  var availableSlack = dl - estOut;
+
+  return {
+    bands:bands, plannedStart:plannedStart, deadline:dl, buffer:buffer,
+    remainTotal:remainTotal, realRemain:realRemain, availableSlack:availableSlack,
+    freeBeforeStart:Math.max(0, plannedStart-state.now),
+    overrun:Math.max(0,-availableSlack), estOut:estOut, dlPlanned:dlPlanned,
+    height: Math.max(60, y - GAP)
+  };
+}
+
+function timeToY(min){
+  var L=state.layout;
+  for(var i=0;i<L.bands.length;i++){
+    var b=L.bands[i];
+    if(min<=b.start) return i===0 ? 0 : L.bands[i-1].y + L.bands[i-1].h;
+    if(min<=b.end){
+      if(b.logicalDur<=0) return b.y;
+      return b.y + ((min-b.start)/b.logicalDur)*b.h;
+    }
+  }
+  var last=L.bands[L.bands.length-1];
+  return last ? last.y+last.h : 0;
+}
+function yToTime(y){
+  var L=state.layout;
+  for(var i=0;i<L.bands.length;i++){
+    var b=L.bands[i];
+    if(y<=b.y) return b.start;
+    if(y<=b.y+b.h){
+      if(b.logicalDur<=0) return b.start;
+      return b.start + ((y-b.y)/b.h)*b.logicalDur;
+    }
+  }
+  var last=L.bands[L.bands.length-1];
+  return last ? last.end : L.deadline;
+}
+function stepBand(step){
+  var L=state.layout;
+  if(!L) return null;
+  for(var i=0;i<L.bands.length;i++){
+    if(L.bands[i].items.indexOf(step) >= 0) return L.bands[i];
+  }
+  return null;
+}
+
+/* ---------- 完成 / 激活 ---------- */
+function completeStep(step, auto){
+  if(step.state === 'completed' || step.role === 'deadline') return;
+  if(step.state === 'unconfirmed'){
+    step.state = 'completed';
+    step.autoDone = false;
+    refreshActive();
+    return;
+  }
+  var b = stepBand(step);
+  var bs = b ? b.start : state.now;
+  var elapsed = Math.max(0, state.now - bs);
+  // 手动完成：按真实用时冻结（此时块的高度早就长成这个值了，不会再跳）
+  // 静默自动完成：至少冻结在当前已长成的高度，避免块突然缩回
+  step.actualDur = auto ? Math.max(plannedOf(step), elapsed)
+                        : (elapsed > 0.4 ? elapsed : plannedOf(step));
+  // 还没轮到的步骤被直接勾掉：把它的起点就钉在原位，不要跳到前面去
+  if(step.startedAt == null) step.startedAt = bs;
+  step.state = 'completed';
+  step.completedAt = step.startedAt + step.actualDur;
+  step.autoDone = !!auto;
+  step.lastAlertOver = null;
+  refreshActive();
+}
+function uncompleteStep(step){
+  step.state = 'pending';
+  step.actualDur = null;
+  step.completedAt = null;
+  step.startedAt = null;
+  step.autoDone = false;
+  step.lastAlertOver = null;
+  refreshActive();
+}
+function refreshActive(){
+  var bands = buildBands(liveTasks());
+  var first = null;
+  var justStarted = false;
+  for(var i=0;i<bands.length;i++){
+    if(!bandDone(bands[i])){ first=bands[i]; break; }
+  }
+  var remaining = bands.filter(function(b){ return !bandDone(b); })
+                       .reduce(function(sum,b){ return sum + bandDur(b); },0);
+  var latest = dlMin(state.template) - remaining - state.template.buffer/60;
+  if(!state.executionStarted && state.now >= latest){
+    state.executionStarted = true;
+    state.executionOrigin = latest;
+    justStarted = true;
+  }
+
+  taskSteps().forEach(function(s){
+    var shouldRun = state.executionStarted && first && first.items.indexOf(s) >= 0 && !isSettled(s);
+    if(shouldRun){
+      s.state = 'active';
+      if(s.startedAt == null) s.startedAt = justStarted ? state.executionOrigin : state.now;
+    }else if(s.state === 'active'){
+      s.state = 'pending';
+      s.startedAt = null;
+    }
+  });
+}
+
+/* ---------- 超时检查 + 两种提醒模式 ---------- */
+function checkAlerts(){
+  if(!state.layout) return false;
+  var changed = false;
+  var target = null;
+
+  var L = state.layout;
+  for(var i=0;i<L.bands.length;i++){
+    var b = L.bands[i];
+    for(var j=0;j<b.items.length;j++){
+      var s = b.items[j];
+      if(s.role !== 'task' || isSettled(s)) continue;
+      var plannedEnd = b.start + plannedOf(s);
+      if(state.now > plannedEnd + 0.02){ target = { step:s, band:b, plannedEnd:plannedEnd }; break; }
+    }
+    if(target) break;
+  }
+  if(!target) return false;
+
+  var s = target.step, over = state.now - target.plannedEnd;
+
+  if(state.alertMode === 'silent'){
+    pushNotice('↪ ' + s.title + ' 已自动推进',
+      '超出计划 ' + Math.round(over) + ' 分钟，先进入下一项，完成状态待你确认', 'ok');
+    var elapsed = Math.max(plannedOf(s), state.now - target.band.start);
+    s.actualDur = elapsed;
+    if(s.startedAt == null) s.startedAt = target.band.start;
+    s.completedAt = s.startedAt + elapsed;
+    s.state = 'unconfirmed';
+    s.autoDone = true;
+    s.lastAlertOver = null;
+    refreshActive();
+    changed = true;
+  }else{
+    var last = s.lastAlertOver;
+    if(last == null || (over - last) >= ALERT_IV){
+      s.lastAlertOver = over;
+      pushNotice('⏰ ' + s.title + ' 还没完成',
+        '已超 ' + Math.round(over) + ' 分钟 · 再超 ' + ALERT_IV + ' 分钟会再次提醒', 'warn');
+    }
+  }
+  return changed;
+}
+
+/* ---------- 降级三档 ---------- */
+function assess(){
+  var L=state.layout;
+  if(L.availableSlack >= 0) return { level:'ok', slack:L.availableSlack, keep:L.buffer };
+  return { level:'over', deficit:-L.availableSlack, newDeadline: L.estOut };
+}
+function recommendCut(deficit){
+  var pool = liveTasks().filter(function(s){
+    return s.importance !== 'hardDeadline' && s.duration > 0
+        && s.lane === 0 && !isSettled(s);
+  });
+  if(pool.length <= 1) return null;
+  var sorted = pool.slice().sort(function(a,b){ return b.duration - a.duration; });
+  var picked=[], sum=0;
+  for(var i=0;i<sorted.length;i++){
+    if(sum >= deficit) break;
+    if(picked.length >= sorted.length - 1) break;
+    picked.push(sorted[i]); sum += sorted[i].duration/60;
+  }
+  return sum >= deficit ? { items:picked, saved:sum } : null;
+}
+/* 砍不掉的那些（hardDeadline / 唯一任务 / 并行支线）—— 改压时长 */
+function recommendResize(deficit){
+  var pool = liveTasks().filter(function(s){
+    return !isSettled(s) && s.lane === 0 && canResize(s);
+  });
+  if(!pool.length) return null;
+  // 普通项优先被压；hardDeadline 只在必要时才动
+  function score(s){
+    return (s.duration/60 - floorOf(s)) * (s.importance === 'hardDeadline' ? HARD_W : 1);
+  }
+  var sorted = pool.slice().sort(function(a,b){ return score(b) - score(a); });
+  var picked=[], sum=0;
+  for(var i=0;i<sorted.length;i++){
+    if(sum >= deficit) break;
+    var s = sorted[i], from = Math.round(s.duration/60), lo = Math.round(floorOf(s));
+    var to = lo;
+    if(deficit - sum < from - lo) to = Math.max(lo, Math.round(from - (deficit - sum)));
+    if(to >= from) continue;
+    picked.push({ step:s, from:from, to:to, save:from-to });
+    sum += from - to;
+  }
+  if(!picked.length) return null;
+  return { items:picked, saved:sum, enough: sum >= deficit - 0.01, left: Math.max(0, deficit - sum) };
+}
+
+/* ---------- 渲染 ---------- */
+function renderChrome(){
+  var L=state.layout, t=state.template, a=assess();
+
+  document.getElementById('tplName').textContent = t.name;
+  var md=document.getElementById('tplMode');
+  md.textContent = t.mode==='backward' ? '倒推' : '顺排';
+  md.className = 'tag ' + (t.mode==='backward'?'back':'fwd');
+  document.getElementById('tplRec').textContent = t.recurrence==='daily' ? '每天' : '单次';
+
+  var openCount=liveTasks().filter(function(s){ return !isSettled(s); }).length;
+  document.getElementById('latestStart').textContent = openCount ? fmt(L.plannedStart) : '已完成';
+  var startLabel=document.getElementById('startLabel');
+  var startHint=document.getElementById('startHint');
+  if(!state.executionStarted && L.freeBeforeStart > 0.01){
+    startLabel.textContent='最晚必须开始';
+    startHint.textContent='现在还可以自由安排 '+Math.ceil(L.freeBeforeStart)+' 分钟 · 安全垫固定 '+Math.round(L.buffer)+' 分钟';
+  }else{
+    startLabel.textContent=openCount ? (state.executionStarted?'剩余任务最晚开始':'现在必须开始') : '任务线状态';
+    startHint.textContent=openCount
+      ? (state.executionStarted ? '已经进入执行 · 安全垫固定 '+Math.round(L.buffer)+' 分钟' : '现在必须开始')
+      : '所有步骤都已处理 · 安全垫仍固定 '+Math.round(L.buffer)+' 分钟';
+  }
+
+  var late = L.estOut - L.deadline;
+  var eo=document.getElementById('estOut');
+  eo.textContent = fmt(L.estOut);
+  eo.className = 'v est ' + (late > 0.5 ? 'bad' : 'ok');
+  document.getElementById('tgtOut').textContent = fmt(L.deadline);
+
+  var bd=document.getElementById('deltaBadge');
+  if(late > 0.5){
+    bd.className='delta bad';
+    bd.textContent='晚 ' + Math.round(late) + ' 分钟';
+  }else if(late < -0.5){
+    bd.className='delta good';
+    bd.textContent='提前 ' + Math.round(-late) + ' 分钟';
+  }else{
+    bd.className='delta good';
+    bd.textContent = '准点';
+  }
+
+  document.getElementById('bVal').textContent = Math.round(L.buffer) + ' 分钟';
+  document.getElementById('bMinus').disabled = L.buffer <= 0;
+  document.getElementById('bPlus').disabled  = L.buffer >= 30;
+
+  // 提醒模式
+  Array.prototype.slice.call(document.querySelectorAll('#modeBox .mode')).forEach(function(m){
+    m.className = 'mode' + (m.dataset.mode === state.alertMode ? ' on' : '') +
+                  (m.dataset.mode === 'silent' ? ' silent' : '');
+  });
+
+  // 模拟时钟
+  var st=document.getElementById('simTime');
+  if(document.activeElement !== st){
+    var mm=Math.floor(state.now), ss=Math.floor((state.now*60)%60);
+    var hh=Math.floor(mm/60), mi=mm%60;
+    st.value = (hh<10?'0':'')+hh+':'+(mi<10?'0':'')+mi+':'+(ss<10?'0':'')+ss;
+  }
+  var pb=document.getElementById('playBtn');
+  pb.textContent = state.playing ? '❚❚' : '▶';
+  pb.className = 'play' + (state.playing ? ' on' : '');
+  var sh=document.getElementById('simHint');
+  if(state.playing){
+    sh.innerHTML = '时间流动中 · ' + state.speed + '× · 现在 <b>' + fmtSec(state.now) + '</b>';
+  }else{
+    sh.textContent = '时间静止中 · 点 ▶ 让时间流动，红线会随时间下移';
+  }
+
+  // 进度
+  var countedSteps=taskSteps().filter(function(s){ return !s.skipped; });
+  var all=countedSteps.length;
+  var doneSteps=countedSteps.filter(function(s){ return s.state==='completed'; });
+  var pendingConfirm=countedSteps.filter(function(s){ return s.state==='unconfirmed'; });
+  var planSum=doneSteps.reduce(function(a2,s){ return a2 + plannedOf(s); }, 0);
+  var actSum =doneSteps.reduce(function(a2,s){ return a2 + actualOf(s); }, 0);
+  var diff = planSum - actSum;
+  var prog = '完成 <b>' + doneSteps.length + '/' + all + '</b>';
+  if(pendingConfirm.length) prog += ' <span style="color:#BA7517">· 待确认 '+pendingConfirm.length+'</span>';
+  if(doneSteps.length){
+    prog += ' · 实际 ' + Math.round(actSum) + '′ / 计划 ' + Math.round(planSum) + '′';
+    if(Math.abs(diff) >= 0.5){
+      prog += diff > 0 ? ' <span class="good">快 ' + Math.round(diff) + '′</span>'
+                       : ' <span class="bad">慢 ' + Math.round(-diff) + '′</span>';
+    }
+  }
+  document.getElementById('mProg').innerHTML = prog;
+  document.getElementById('mPlan').textContent = fmt(L.plannedStart) + ' 开始 · ' + fmt(L.deadline) + ' 出门';
+  document.getElementById('mSlack').innerHTML = (!state.executionStarted && L.freeBeforeStart > 0
+      ? '可自由安排 '+Math.ceil(L.freeBeforeStart)+' 分钟'
+      : (L.availableSlack >= 0 ? '预计可早 '+Math.round(L.availableSlack)+' 分钟' : '还差 '+Math.round(-L.availableSlack)+' 分钟')) +
+    '<span style="color:#D3D1C7"> · </span>安全垫固定 '+Math.round(L.buffer)+' 分钟 · 现在 ' + fmtSec(state.now);
+
+  var stt=elStatus;
+  if(doneSteps.length === all){
+    stt.className='status ok';
+    stt.innerHTML='<span class="dot"></span><span>全部完成 · 出门 <b>'+fmt(L.estOut)+'</b>'+
+      (L.estOut < L.deadline - 0.5 ? '（比目标早 '+Math.round(L.deadline-L.estOut)+' 分钟）' : '')+'</span>';
+  }else if(pendingConfirm.length && doneSteps.length + pendingConfirm.length === all){
+    stt.className='status warn';
+    stt.innerHTML='<span class="dot"></span><span>任务线已推进完成 · 还有 <b>'+pendingConfirm.length+' 项待确认</b></span>';
+  }else if(!state.executionStarted && L.freeBeforeStart > 0){
+    stt.className='status ok';
+    stt.innerHTML='<span class="dot"></span><span>距离最晚开始还有 <b>'+Math.ceil(L.freeBeforeStart)+
+      ' 分钟</b> · 可以提前开始，也可以先做别的</span>';
+  }else if(a.level==='ok'){
+    stt.className='status ok';
+    stt.innerHTML='<span class="dot"></span><span>按当前进度'+
+      (a.slack > 0.5 ? '可早 <b>'+Math.round(a.slack)+' 分钟</b>' : '可以<b>准点</b>')+
+      ' · 固定安全垫 '+Math.round(a.keep)+' 分钟已计入预计时间</span>';
+  }else{
+    stt.className='status bad';
+    stt.innerHTML='<span class="dot"></span><span>余量为负，<b>还差 '+Math.round(a.deficit)+
+      ' 分钟</b> · 按当前进度预计 <span class="mono">'+fmt(L.estOut)+'</span> 出门</span>';
+  }
+
+  if(a.level!=='over'){
+    elDegrade.className='deg none'; elDegrade.innerHTML='';
+  }else{
+    var rec=recommendCut(a.deficit);
+    var rs =recommendResize(a.deficit);
+    var html='<div class="deg-h">要保住 '+fmt(L.deadline)+' 出门，还差 '+Math.round(a.deficit)+
+             ' 分钟，得做取舍</div>';
+    var acts='';
+
+    if(rec){
+      var names=rec.items.map(function(s){ return '「'+s.title+'」'; }).join('、');
+      html+='<div class="deg-b">砍掉 '+names+'，省 <em>'+Math.round(rec.saved)+
+            ' 分钟</em>，即可回到 '+fmt(L.deadline)+' 出门</div>';
+      acts+='<button data-deg="apply">砍掉这 '+rec.items.length+' 项</button>';
+    }else{
+      html+='<div class="deg-b">剩下的都是不能砍的步骤'+
+            '（<code>hardDeadline</code>'+(liveTasks().length<=1?' · 仅剩唯一任务':'')+'），'+
+            '那就只能改时长或改期</div>';
+    }
+
+    if(rs){
+      var lines=rs.items.map(function(x){
+        return '「'+x.step.title+'」<code>'+x.from+'′→'+x.to+'′</code>';
+      }).join('、');
+      if(!rec){
+        html+='<div class="deg-b">把 '+lines+'，省 <em>'+Math.round(rs.saved)+' 分钟</em>'+
+              (rs.enough ? '，即可回到 '+fmt(L.deadline)+' 出门'
+                         : '，仍差 <em>'+Math.round(rs.left)+' 分钟</em>')+'</div>';
+      }else{
+        html+='<div class="deg-b sub">不想砍也行 —— 把 '+lines+
+              '，省 <em>'+Math.round(rs.saved)+' 分钟</em>'+
+              (rs.enough?'':'（仍差 '+Math.round(rs.left)+' 分钟）')+'</div>';
+      }
+      acts+='<button data-deg="resize">压时间</button>';
+    }else if(!rec){
+      html+='<div class="deg-b">各项时长也已经压到最短了，只能改期</div>';
+    }
+
+    acts+='<button data-deg="reschedule">改为 '+fmt(a.newDeadline)+' 出门</button>';
+    html+='<div class="deg-a">'+acts+'</div>';
+    html+='<div class="deg-tip">想只动某一项？点时间线上的任务块，在下方单独 ± 调它的时长</div>';
+
+    var adj=resizedSteps();
+    if(adj.length){
+      html+='<div class="deg-skip">已压缩 '+adj.length+' 项';
+      adj.forEach(function(s){
+        html+='<div class="row"><s>'+s.title+' · '+Math.round(s.baseDuration)+'′ → '+
+              Math.round(s.duration/60)+'′</s>'+
+              '<button data-deg="unresize" data-id="'+s.id+'">还原</button></div>';
+      });
+      html+='</div>';
+    }
+
+    var skipped=state.template.steps.filter(function(s){ return s.skipped; });
+    if(skipped.length){
+      html+='<div class="deg-skip">已跳过 '+skipped.length+' 项';
+      skipped.forEach(function(s){
+        html+='<div class="row"><s>'+s.title+' · '+Math.round(plannedOf(s))+
+              ' 分钟</s><button data-deg="restore" data-id="'+s.id+'">恢复</button></div>';
+      });
+      html+='</div>';
+    }
+    elDegrade.className='deg bad';
+    elDegrade.innerHTML=html;
+  }
+
+  var sel=null;
+  if(state.selected) sel=state.template.steps.filter(function(s){ return s.id===state.selected; })[0];
+  if(sel){
+    var imp = sel.importance==='hardDeadline' ? ' · hardDeadline（不可砍）' : '';
+    var ln  = sel.lane===1 ? ' · lane: 1（并行支线）' : ' · lane: 0';
+    var ext = isSettled(sel)
+      ? ' · 实际 '+actualOf(sel).toFixed(1)+' 分钟' + (sel.state==='unconfirmed' ? '（待确认）' : '')
+      : '';
+    var cur = Math.round(sel.duration/60), base = Math.round(baseOf(sel)),
+        lo  = Math.round(floorOf(sel));
+
+    elPrompt.className='prompt on';
+    elPrompt.innerHTML =
+      '<div class="t"></div><div class="p"></div>'+
+      '<div class="durbar">'+
+        '<span class="k">这项时长</span>'+
+        '<span class="stepper">'+
+          '<button data-dur="-1" title="缩短 1 分钟">−</button>'+
+          '<span class="v"></span>'+
+          '<button data-dur="+1" title="加长 1 分钟">+</button>'+
+        '</span>'+
+        '<button class="rst" data-dur="reset">还原</button>'+
+      '</div>'+
+      '<button class="laneact" data-lane="toggle"></button>'+
+      '<div class="st"></div>';
+
+    elPrompt.querySelector('.t').textContent = sel.title;
+    elPrompt.querySelector('.p').textContent = sel.prompt;
+
+    var dv = elPrompt.querySelector('.stepper .v');
+    dv.innerHTML = cur + '′' + (sel.baseDuration != null ? '<i>原 '+base+'′</i>' : '');
+
+    var editable = sel.role === 'task' && !isSettled(sel);
+    elPrompt.querySelectorAll('.stepper button').forEach(function(bt){
+      var d = +bt.dataset.dur;
+      bt.disabled = !editable || (d < 0 ? !canResize(sel) : Math.round(sel.duration/60) >= DUR_MAX);
+    });
+    var rst = elPrompt.querySelector('.rst');
+    rst.disabled = !editable || sel.baseDuration == null || cur === base;
+    elPrompt.querySelector('.durbar').style.display =
+      (sel.role === 'task') ? '' : 'none';
+
+    var laneBtn=elPrompt.querySelector('.laneact');
+    var pos=taskSteps().indexOf(sel), prev=pos>0?taskSteps()[pos-1]:null;
+    var canJoin=editable && prev && prev.lane===0 && !isSettled(prev) && prev.state!=='active';
+    laneBtn.textContent=sel.lane===1?'移回主线':'与上一项并行';
+    laneBtn.disabled=!(sel.lane===1 || canJoin);
+
+    elPrompt.querySelector('.st').textContent =
+      'state: '+sel.state+imp+ln+' · 计划 '+cur+' 分钟'+
+      (editable ? '（下限 '+lo+'′）' : '')+ext;
+  }else{
+    elPrompt.className='prompt'; elPrompt.innerHTML='';
+  }
+
+  renderDock();
+}
+
+function renderDock(){
+  var L=state.layout;
+  var title=document.getElementById('dockTitle');
+  var sub=document.getElementById('dockSub');
+  var actions=document.getElementById('dockActions');
+  var active=taskSteps().filter(function(s){ return s.state==='active'; });
+  var waiting=taskSteps().filter(function(s){ return s.state==='unconfirmed'; });
+  var open=liveTasks().filter(function(s){ return !isSettled(s); });
+
+  if(!state.executionStarted && open.length){
+    title.textContent='准备开始 · '+open[0].title;
+    sub.textContent='最晚 '+fmt(L.plannedStart);
+    actions.innerHTML='<button class="primary" data-dock="start">提前开始</button><button data-dock="adjust" data-id="'+open[0].id+'">调整这项</button>';
+    return;
+  }
+
+  if(active.length===1){
+    var s=active[0];
+    title.textContent=s.title;
+    sub.textContent='已进行 '+Math.max(0,Math.floor(state.now-(s.startedAt||state.now)))+' 分钟';
+    actions.innerHTML='<button class="primary" data-dock="complete" data-id="'+s.id+'">完成</button>'+
+      '<button data-dock="skip" data-id="'+s.id+'">跳过</button>'+
+      '<button data-dock="adjust" data-id="'+s.id+'">调整</button>';
+    return;
+  }
+
+  if(active.length>1){
+    title.textContent='并行进行中 · '+active.map(function(s){ return s.title; }).join(' + ');
+    sub.textContent=active.length+' 项同时计时';
+    actions.innerHTML=active.map(function(s){
+      return '<button class="primary" data-dock="complete" data-id="'+s.id+'">完成 '+s.title+'</button>';
+    }).join('');
+    return;
+  }
+
+  if(waiting.length){
+    title.textContent='有 '+waiting.length+' 项完成状态待确认';
+    sub.textContent='静默推进未替你做决定';
+    actions.innerHTML='<button disabled>请在对应任务块上确认</button>';
+    return;
+  }
+
+  title.textContent='任务线已完成';
+  sub.textContent='预计 '+fmt(L.estOut)+' 出门';
+  actions.innerHTML='<button disabled>全部完成</button>';
+}
+
+function renderBands(){
+  var L=state.layout;
+  // 并行支线的可视时长：正在做的那组里，每条 lane 都跟着真实时间一起长
+  function laneMins(it, b){
+    var used=isSettled(it) ? actualOf(it) : Math.max(plannedOf(it), b.grow || 0);
+    return visualMinutes(it, used);
+  }  Array.prototype.slice.call(stage.querySelectorAll('.band,.ghost')).forEach(function(n){ n.remove(); });
+
+  L.bands.forEach(function(b){
+    if(b.type!=='single') return;
+    if(b.dur<=0 && b.items[0].role!=='deadline') return;
+    if(Math.abs(b.end - b.plannedEnd) < 0.5) return;
+    var gh=document.createElement('div');
+    gh.className='ghost';
+    gh.style.top=timeToY(b.plannedEnd)+'px';
+    gh.innerHTML='<span>计划 '+fmt(b.plannedEnd)+'</span>';
+    stage.appendChild(gh);
+  });
+
+  var lastIdx = L.bands.length - 1;
+
+  L.bands.forEach(function(b, idx){
+    var el=document.createElement('div');
+    var isDl = (b.type==='single' && b.items[0].role==='deadline');
+
+    if(b.type==='buffer'){
+      el.className='band bufferband';
+      el.dataset.band=idx;
+      el.style.top=b.y+'px'; el.style.height=b.h+'px';
+      var blab=document.createElement('div');
+      blab.className='tlabel';
+      blab.innerHTML='<span class="a only">'+fmt(b.end)+'</span>';
+      el.appendChild(blab);
+      var lock=document.createElement('span'); lock.className='b-lock'; lock.textContent='▣';
+      var btxt=document.createElement('span'); btxt.textContent='固定安全垫 '+Math.round(b.dur)+'′';
+      el.appendChild(lock); el.appendChild(btxt);
+      stage.appendChild(el);
+      return;
+    }
+
+    el.className='band '+(b.type==='group'?'group':(isDl?'single deadlineband':'single'));
+    el.dataset.band=idx;
+    el.style.top=b.y+'px'; el.style.height=b.h+'px';
+
+    if(b.type==='single'){
+      var s=b.items[0];
+      if(s.temporary) el.classList.add('temp');
+      if(state.selected===s.id) el.classList.add('selected');
+      if(s.state==='completed') el.classList.add('done');
+      if(s.state==='unconfirmed') el.classList.add('unconfirmed');
+      if(!isDl && s.state==='pending' && b !== L.bands[firstOpenIdx(L)]) el.classList.add('pending-dim');
+
+      if(s.state==='active' && !isDl){
+        var over = state.now - b.start - plannedOf(s);
+        if(over > 0.4) el.classList.add('overdue',urgencyClass(over)); else el.classList.add('running');
+      }
+
+      var showPlan = Math.abs(b.end - b.plannedEnd) >= 0.5;
+      var lab=document.createElement('div');
+      lab.className='tlabel' + (isDl ? ' dl' : '');
+      if(isDl){
+        lab.innerHTML='<span class="a'+(showPlan?'':' only')+'">'+fmt(b.end)+'</span>'+
+                      (showPlan ? '<span class="p">'+fmt(b.plannedEnd)+'</span>' : '');
+      }else{
+        lab.innerHTML='<span class="a'+(showPlan?'':' only')+'">'+fmt(b.end)+'</span>'+
+                      (showPlan ? '<span class="p">'+fmt(b.plannedEnd)+'</span>' : '');
+      }
+      el.appendChild(lab);
+
+      if(!isDl){
+        var ck=document.createElement('button');
+        ck.className='chk'+(s.state==='completed'?' done':'');
+        ck.textContent=s.state==='unconfirmed'?'?':'✓';
+        ck.dataset.toggle=s.id;
+        el.appendChild(ck);
+      }else{
+        var fl=document.createElement('span'); fl.className='b-flag'; fl.textContent='⚑';
+        el.appendChild(fl);
+      }
+
+      var dot=document.createElement('span'); dot.className='b-dot';
+      var tt=document.createElement('div'); tt.className='b-title'; tt.textContent=s.title;
+      el.appendChild(dot); el.appendChild(tt);
+
+      if(!isDl && s.duration>0){
+        var dd=document.createElement('div'); dd.className='b-dur';
+        if(isSettled(s)){
+          dd.textContent = Math.round(actualOf(s))+'′';
+        }else{
+          var base = Math.round(baseOf(s));
+          dd.innerHTML = Math.round(plannedOf(s))+'′' +
+            (s.baseDuration != null && base > Math.round(plannedOf(s))
+              ? '<em class="cut">压 '+(base - Math.round(plannedOf(s)))+'′</em>' : '');
+        }
+        el.appendChild(dd);
+      }
+
+      var due=document.createElement('div'); due.className='b-due';
+      if(isDl){
+        var u=document.createElement('span'); u.className='u';
+        u.textContent = fmt(b.end) + (lateFlag(b) ? ' · 已晚' : '');
+        due.appendChild(u);
+      }else if(s.state==='active'){
+        var over2 = state.now - b.start - plannedOf(s);
+        var lv=document.createElement('span');
+        if(over2 > 0.4){
+          var urgency=urgencyClass(over2);
+          lv.className='b-live warn '+urgency;
+          var lateText=over2>=5?'严重超时':(over2>=2?'已超':'刚超时');
+          lv.innerHTML='<i></i>'+lateText+' '+Math.round(over2)+'′';
+        }else{
+          lv.className='b-live';
+          lv.innerHTML='<i></i>进行中';
+        }
+        due.appendChild(lv);
+      }else if(s.state==='unconfirmed'){
+        var cf=document.createElement('button');
+        cf.className='confirm-chip'; cf.textContent='确认完成';
+        cf.dataset.toggle=s.id;
+        due.appendChild(cf);
+      }else if(s.state==='completed' && b.plannedEnd - b.end > 0.5){
+        var g2=document.createElement('span'); g2.className='gain';
+        g2.textContent='早 '+Math.round(b.plannedEnd - b.end)+'′';
+        due.appendChild(g2);
+      }
+
+      if(!isDl && b.dur>0 && s.role==='task' && !isSettled(s) && s.state!=='active'){
+        var nx=L.bands[idx+1];
+        if(nx && nx.type==='single' && nx.items[0].role==='task' && !isSettled(nx.items[0]) && nx.items[0].state!=='active'){
+          var btn=document.createElement('button');
+          btn.className='act'; btn.textContent='⇄'; btn.title='与下一项并行';
+          btn.dataset.act='merge'; btn.dataset.band=idx;
+          due.appendChild(btn);
+        }
+      }
+      el.appendChild(due);
+
+    }else{
+      var maxH = Math.max.apply(null, b.items.map(function(it){
+        return Math.max(LANE_MINH, laneMins(it, b) * PPM);
+      }));
+
+      var lab2=document.createElement('div');
+      lab2.className='tlabel';
+      lab2.innerHTML='<span class="a only">'+fmt(b.end)+'</span>';
+      el.appendChild(lab2);
+
+      b.items.forEach(function(it){
+        var rawMins = isSettled(it) ? actualOf(it) : Math.max(plannedOf(it), b.grow || 0);
+        var mins = laneMins(it, b);
+        var laneOver = it.state==='active' ? Math.max(0,state.now-b.start-plannedOf(it)) : 0;
+        var h    = Math.max(LANE_MINH, mins*PPM);
+        var wait = maxH - h;
+        var two  = h >= 54;
+
+        var lane=document.createElement('div'); lane.className='lane';
+        var lt=document.createElement('div'); lt.className='lt';
+        lt.style.height=h+'px'; lt.style.flex='none';
+        if(it.state==='completed') lt.classList.add('done');
+        if(it.state==='unconfirmed') lt.classList.add('unconfirmed');
+        if(it.state==='active'){
+          var over3 = state.now - b.start - plannedOf(it);
+          if(over3 > 0.4) lt.classList.add('overdue',urgencyClass(over3)); else lt.classList.add('running');
+        }
+
+        var row1=document.createElement('div'); row1.className='row1';
+        var ck2=document.createElement('button');
+        ck2.className='chk'+(it.state==='completed'?' done':'');
+        ck2.textContent=it.state==='unconfirmed'?'?':'✓';
+        ck2.dataset.toggle=it.id;
+        row1.appendChild(ck2);
+        var n=document.createElement('div'); n.className='n';
+        n.textContent = it.title;
+        if(!two){
+          var sp=document.createElement('span'); sp.className='d';
+          sp.textContent = (laneOver>0.4 ? '超'+Math.round(laneOver)+'′' : Math.round(rawMins)+'′') +
+            (it.state!=='completed' && it.baseDuration != null &&
+             Math.round(it.baseDuration) > Math.round(it.duration/60)
+              ? ' 压'+Math.round(it.baseDuration - it.duration/60)+'′' : '');
+          n.appendChild(sp);
+        }
+        row1.appendChild(n);
+        if(it.state==='unconfirmed'){
+          var cf2=document.createElement('button');
+          cf2.className='confirm-chip'; cf2.textContent='确认';
+          cf2.dataset.toggle=it.id;
+          row1.appendChild(cf2);
+        }
+        lt.appendChild(row1);
+
+        if(two){
+          var d2=document.createElement('div'); d2.className='d2';
+          d2.textContent = Math.round(rawMins)+' 分钟' + (laneOver>0.4?' · 已超 '+Math.round(laneOver)+'′':'') +
+            (it.lane===1 ? ' · 并行' : ' · 主线') +
+            (it.state!=='completed' && it.baseDuration != null &&
+             Math.round(it.baseDuration) > Math.round(it.duration/60)
+              ? ' · 原 '+Math.round(it.baseDuration)+'′' : '');
+          lt.appendChild(d2);
+        }
+        lane.appendChild(lt);
+
+        if(wait > 12){
+          var lw=document.createElement('div'); lw.className='lw';
+          lw.style.height=(wait-2)+'px'; lw.style.flex='none'; lw.style.marginTop='2px';
+          lw.textContent = wait >= 24 ? ('等 '+Math.round(maxH/PPM - mins)+'′') : '';
+          lane.appendChild(lw);
+        }
+        el.appendChild(lane);
+      });
+
+      var xb=document.createElement('button');
+      xb.className='act close'; xb.textContent='✕'; xb.title='拆开并行组';
+      xb.dataset.act='split'; xb.dataset.band=idx;
+      el.appendChild(xb);
+    }
+
+    stage.appendChild(el);
+  });
+
+  stage.style.height=L.height+'px';
+
+  // 红线 + 已流逝区域
+  var nl=document.getElementById('nowline');
+  if(!nl){
+    nl=document.createElement('div'); nl.className='nowline'; nl.id='nowline';
+    nl.innerHTML='<i></i><b></b>';
+    stage.appendChild(nl);
+    nl.addEventListener('pointerdown', onNowDown);
+  }
+  var ny=Math.max(0, Math.min(L.height, timeToY(state.now)));
+  nl.style.top=ny+'px';
+  nl.className='nowline'+(state.playing?' live':'');
+  nl.querySelector('b').textContent=fmtSec(state.now);
+  flowed.style.height=ny+'px';
+
+  stage.classList.add('anim');
+  setTimeout(function(){ stage.classList.remove('anim'); },200);
+}
+
+function lateFlag(b){
+  if(b.type!=='single' || b.items[0].role!=='deadline') return false;
+  return b.end - b.plannedEnd > 0.5;
+}
+function firstOpenIdx(L){
+  for(var i=0;i<L.bands.length;i++){
+    var b=L.bands[i];
+    if(b.type==='buffer') continue;
+    if(!b.done && !(b.type==='single' && b.items[0].role==='deadline')) return i;
+  }
+  return -1;
+}
+
+function render(){ state.layout=computeLayout(); renderChrome(); renderBands(); }
+
+/* 时间流动：只更新红线 / 已流逝区 / 状态区，不重建块 */
+function paintTime(){
+  var L=state.layout;
+  if(!L) return;
+  var nl=document.getElementById('nowline');
+  if(nl){
+    var ny=Math.max(0, Math.min(L.height, timeToY(state.now)));
+    nl.style.top=ny+'px';
+    nl.querySelector('b').textContent=fmtSec(state.now);
+    flowed.style.height=ny+'px';
+  }
+  renderChrome();
+}
+
+/* ---------- 时钟驱动 ---------- */
+function growOf(L){
+  if(!L) return -1;
+  for(var i=0;i<L.bands.length;i++) if(L.bands[i].grow > 0) return L.bands[i].grow;
+  return 0;
+}
+function tick(){
+  if(!state.playing) return;
+  var elapsed = (Date.now() - state.wallBase)/60000 * state.speed;
+  state.now = state.simBase + elapsed;
+
+  var prevGrow = growOf(state.layout);
+  refreshActive();
+  state.layout = computeLayout();       // 先按新时刻重排，再判定超时
+  var changed = checkAlerts();
+  if(changed) state.layout = computeLayout();
+
+  // 正在做的那一项在长大：高度动了 1px 以上就重建块，否则只推红线
+  if(changed || Math.abs(growOf(state.layout) - prevGrow) * PPM >= 1){
+    renderBands();
+    renderChrome();
+  }else{
+    paintTime();
+  }
+}
+setInterval(tick, 100);
+
+/* ---------- 模拟时钟控件 ---------- */
+document.getElementById('playBtn').addEventListener('click', function(){
+  if(!state.playing){
+    if(!NOTIFY_OK) requestNotify();
+    state.simBase = state.now;
+    state.wallBase = Date.now();
+    state.playing = true;
+  }else{
+    state.playing = false;
+  }
+  renderChrome();
+});
+document.getElementById('simTime').addEventListener('change', function(e){
+  var v=e.target.value || '00:00:00';
+  var parts=v.split(':');
+  var h=parseInt(parts[0],10)||0, m=parseInt(parts[1],10)||0, s=parseInt(parts[2],10)||0;
+  state.now = h*60 + m + s/60;
+  state.simBase = state.now;
+  state.wallBase = Date.now();
+  // 时间回拨 → 清掉提醒节流，允许重新触发
+  liveTasks().forEach(function(s){ s.lastAlertOver = null; });
+  refreshActive();
+  state.layout = computeLayout();
+  renderBands(); renderChrome();
+});
+document.getElementById('spdBox').addEventListener('click', function(e){
+  var b=e.target.closest('button[data-spd]');
+  if(!b) return;
+  Array.prototype.slice.call(this.querySelectorAll('button')).forEach(function(x){
+    x.className = (x === b ? 'on' : '');
+  });
+  // 先把已流逝的折算进基准，再换速度
+  if(state.playing){
+    state.simBase = state.now;
+    state.wallBase = Date.now();
+  }
+  state.speed = +b.dataset.spd;
+  renderChrome();
+});
+document.getElementById('nbBtn').addEventListener('click', requestNotify);
+
+/* ---------- 提醒模式切换 ---------- */
+document.getElementById('modeBox').addEventListener('click', function(e){
+  var m=e.target.closest('.mode');
+  if(!m) return;
+  state.alertMode = m.dataset.mode;
+  liveTasks().forEach(function(s){ s.lastAlertOver = null; });
+  if(state.alertMode === 'silent' && state.playing) checkAlerts();
+  renderBands(); renderChrome();
+});
+
+/* ---------- 底部当前任务操作区 ---------- */
+document.getElementById('actionDock').addEventListener('click', function(e){
+  var btn=e.target.closest('button[data-dock]');
+  if(!btn || btn.disabled) return;
+  var s=btn.dataset.id ? stepByID(+btn.dataset.id) : null;
+
+  if(btn.dataset.dock==='start'){
+    state.executionStarted=true;
+    state.executionOrigin=state.now;
+    refreshActive();
+  }else if(btn.dataset.dock==='complete'){
+    if(s) completeStep(s, false);
+  }else if(btn.dataset.dock==='skip'){
+    if(s){
+      s.skipped=true; s.state='skipped'; s.startedAt=null;
+      refreshActive();
+    }
+  }else if(btn.dataset.dock==='adjust'){
+    if(s) state.selected=s.id;
+  }
+  state.layout=computeLayout(); renderBands(); renderChrome();
+});
+
+/* ---------- 勾选完成 ---------- */
+stage.addEventListener('click', function(e){
+  var ck=e.target.closest('button[data-toggle]');
+  if(ck){
+    var id=+ck.dataset.toggle;
+    var s=state.template.steps.filter(function(x){ return x.id===id; })[0];
+    if(!s) return;
+    if(s.state==='completed') uncompleteStep(s);
+    else { completeStep(s); s.lastAlertOver=null; }
+    state.layout=computeLayout(); renderBands(); renderChrome();
+    return;
+  }
+  var btn=e.target.closest('button[data-act]');
+  if(!btn) return;
+  var idx=+btn.dataset.band;
+  if(btn.dataset.act==='merge') mergeNext(idx);
+  if(btn.dataset.act==='split') splitGroup(idx);
+});
+
+/* ---------- 拖拽 ---------- */
+var drag=null;
+
+stage.addEventListener('pointerdown', function(e){
+  if(e.target.closest('button')) return;
+  if(e.target.closest('.nowline')) return;
+  var el=e.target.closest('.band');
+  if(!el) return;
+
+  var idx=+el.dataset.band, metas=[];
+  var source=state.layout.bands[idx];
+  var locked = !source || source.type==='buffer' ||
+    (source.type==='single' && source.items[0].role==='deadline') ||
+    source.items.some(function(s){ return s.state==='active' || isSettled(s); });
+  if(locked){
+    hint('已经发生的任务和目标时间不能拖动');
+    setTimeout(function(){ hint(''); },1400);
+    return;
+  }
+  var taskCount=state.layout.bands.filter(function(b){
+    return b.type!=='buffer' && !(b.type==='single' && b.items[0].role==='deadline');
+  }).length;
+  Array.prototype.slice.call(stage.querySelectorAll('.band')).forEach(function(n){
+    var i=+n.dataset.band;
+    if(i>=taskCount) return;
+    var top=parseFloat(n.style.top), h=parseFloat(n.style.height);
+    metas.push({ i:i, y:top, h:h, cy:top+h/2 });
+  });
+
+  drag={ idx:idx, el:el, startY:e.clientY, startX:e.clientX,
+         elTop:metas[idx].y, elCy0:metas[idx].cy,
+         metas:metas, target:idx, dx:0, moved:false };
+  el.classList.add('dragging');
+  try{ el.setPointerCapture(e.pointerId); }catch(err){}
+  e.preventDefault();
+});
+
+function onPointerMove(e){
+  if(!drag) return;
+  var dy=e.clientY-drag.startY;
+  var dx=e.clientX-drag.startX;
+  if(Math.abs(dy)>3 || Math.abs(dx)>3) drag.moved=true;
+
+  var tdx=Math.max(-72, Math.min(72, dx));
+  drag.dx=dx;
+  drag.el.style.top=(drag.elTop+dy)+'px';
+  drag.el.style.transform='translateX('+tdx+'px)';
+
+  var cy=drag.elCy0+dy, count=0;
+  drag.metas.forEach(function(m){ if(m.i!==drag.idx && m.cy<cy) count++; });
+  drag.target=count;
+
+  var others=state.layout.bands.filter(function(b,i){
+    return i!==drag.idx && b.type!=='buffer' && !(b.type==='single' && b.items[0].role==='deadline');
+  });
+  var y=0;
+  for(var k=0;k<count;k++){ y+=others[k].h+GAP; }
+
+  var host = count > 0 ? others[count-1] : null;
+  var hostOK = host && host.type==='single' && host.items[0].role==='task'
+               && !isSettled(host.items[0]) && host.items[0].state!=='active';
+
+  if(dx > PARALLEL_T && hostOK){
+    dropEl.style.display='none';
+    var w = stage.clientWidth - 70 - 12;
+    pslot.style.display='flex';
+    pslot.style.left=(70 + w/2 + 3)+'px';
+    pslot.style.width=(w/2 - 3)+'px';
+    pslot.style.top=host.y+'px';
+    pslot.style.height=host.h+'px';
+    drag.el.classList.add('lane-hint');
+    hint('松开 → 与「'+host.items[0].title+'」并行');
+  }else{
+    pslot.style.display='none';
+    drag.el.classList.remove('lane-hint');
+    dropEl.style.display='block';
+    dropEl.style.top=Math.max(0, count===0 ? 0 : y-GAP/2)+'px';
+    if(dx < -PARALLEL_T && state.layout.bands[drag.idx].type==='group') hint('松开 → 回到主线');
+    else if(dx > PARALLEL_T && !hostOK) hint('这里没有可并行的任务');
+    else hint('');
+  }
+}
+
+function onPointerUp(){
+  if(!drag) return;
+  dropEl.style.display='none';
+  pslot.style.display='none';
+  hint('');
+  var d=drag; drag=null;
+
+  if(!d.moved){ selectBand(d.idx); return; }
+
+  var mode='keep';
+  if(d.dx > PARALLEL_T)       mode='parallel';
+  else if(d.dx < -PARALLEL_T) mode='serial';
+
+  if(d.target!==d.idx || mode!=='keep') applyDrop(d.idx, d.target, mode);
+  refreshActive();
+  state.layout=computeLayout(); renderBands(); renderChrome();
+}
+
+document.addEventListener('pointermove', onPointerMove);
+document.addEventListener('pointerup', onPointerUp);
+document.addEventListener('pointercancel', onPointerUp);
+
+function applyDrop(fromBand, toIdx, mode){
+  var bands = state.layout.bands.filter(function(b){
+    return b.type!=='buffer' && !(b.type==='single' && b.items[0].role==='deadline');
+  });
+  var groups = bands.map(function(b){ return b.items.slice(); });
+  var moved = groups.splice(fromBand, 1)[0];
+
+  var to = toIdx;
+  if(fromBand < toIdx) to = toIdx - 1;
+  to = Math.max(0, Math.min(groups.length, to));
+
+  if(mode === 'parallel'){
+    var host = to - 1;
+    var hostItems = host >= 0 ? groups[host] : null;
+    var hostOK = hostItems && hostItems[0].role === 'task'
+                 && hostItems.length + moved.length <= LANE_MAX;
+    if(hostOK){
+      moved.forEach(function(s){ s.lane = 1; });
+      groups[host] = hostItems.concat(moved);
+    }else{
+      moved.forEach(function(s){ s.lane = 0; });
+      groups.splice(to, 0, moved);
+    }
+  }else if(mode === 'serial'){
+    moved.forEach(function(s){ s.lane = 0; });
+    groups.splice(to, 0, moved);
+  }else{
+    groups.splice(to, 0, moved);
+  }
+
+  var flat=[];
+  groups.forEach(function(g){ g.forEach(function(s){ flat.push(s); }); });
+  state.template.steps.filter(function(s){ return s.role==='deadline'; })
+    .forEach(function(s){ s.lane = 0; flat.push(s); });
+  state.template.steps = flat;
+}
+
+function mergeNext(idx){
+  var bands=state.layout.bands, b1=bands[idx], b2=bands[idx+1];
+  if(!b1||!b2) return;
+  if(b1.items.length!==1||b2.items.length!==1) return;
+  if(b1.items[0].role!=='task'||b2.items[0].role!=='task') return;
+  b2.items[0].lane = 1;
+  renderBands(); renderChrome();
+}
+function splitGroup(idx){
+  var b=state.layout.bands[idx];
+  if(!b||b.type!=='group') return;
+  b.items.forEach(function(it, i){ if(i>0) it.lane = 0; });
+  renderBands(); renderChrome();
+}
+function selectBand(idx){
+  var b=state.layout.bands[idx];
+  if(!b || b.type==='buffer' || !b.items.length) return;
+  state.selected = (state.selected===b.items[0].id) ? null : b.items[0].id;
+  renderChrome();
+}
+
+/* ---------- buffer ---------- */
+document.getElementById('bMinus').addEventListener('click', function(){
+  state.template.buffer=Math.max(0, state.template.buffer-60);
+  state.layout=computeLayout(); renderBands(); renderChrome();
+});
+document.getElementById('bPlus').addEventListener('click', function(){
+  state.template.buffer=Math.min(30*60, state.template.buffer+60);
+  state.layout=computeLayout(); renderBands(); renderChrome();
+});
+
+/* ---------- 降级动作 ---------- */
+elDegrade.addEventListener('click', function(e){
+  var btn=e.target.closest('button[data-deg]');
+  if(!btn) return;
+  var a=assess();
+  if(btn.dataset.deg==='apply'){
+    var rec=recommendCut(a.deficit);
+    if(rec) rec.items.forEach(function(s){ s.skipped=true; });
+    refreshActive();
+  }else if(btn.dataset.deg==='resize'){
+    var rs=recommendResize(a.deficit);
+    if(rs) rs.items.forEach(function(x){ setDuration(x.step, x.to); });
+    refreshActive();
+  }else if(btn.dataset.deg==='unresize'){
+    resetDuration(stepByID(+btn.dataset.id));
+    refreshActive();
+  }else if(btn.dataset.deg==='reschedule'){
+    var nd=a.newDeadline;
+    state.template.deadlineHour=Math.floor(nd/60);
+    state.template.deadlineMinute=Math.round(nd%60);
+  }else if(btn.dataset.deg==='restore'){
+    var id=+btn.dataset.id;
+    state.template.steps.forEach(function(s){ if(s.id===id){ s.skipped=false; s.state='pending'; } });
+    refreshActive();
+  }
+  state.layout=computeLayout(); renderBands(); renderChrome();
+});
+
+/* ---------- 选中项：单项时长微调 ---------- */
+elPrompt.addEventListener('click', function(e){
+  var laneBtn=e.target.closest('button[data-lane]');
+  if(laneBtn && !laneBtn.disabled){
+    var laneSel=stepByID(state.selected);
+    if(!laneSel) return;
+    laneSel.lane = laneSel.lane===1 ? 0 : 1;
+    refreshActive();
+    state.layout=computeLayout(); renderBands(); renderChrome();
+    return;
+  }
+  var btn=e.target.closest('button[data-dur]');
+  if(!btn || btn.disabled) return;
+  var sel=stepByID(state.selected);
+  if(!sel) return;
+  var d=btn.dataset.dur;
+  if(d==='reset') resetDuration(sel);
+  else setDuration(sel, sel.duration/60 + (+d));
+  state.layout=computeLayout(); renderBands(); renderChrome();
+});
+
+/* ---------- 拖红线 = 直接拨动时间 ---------- */
+var nowDrag=null;
+function onNowDown(e){
+  nowDrag={ stageTop: stage.getBoundingClientRect().top };
+  try{ e.currentTarget.setPointerCapture(e.pointerId); }catch(err){}
+  state.playing=false;
+  e.preventDefault(); e.stopPropagation();
+}
+document.addEventListener('pointermove', function(e){
+  if(!nowDrag) return;
+  var L=state.layout;
+  var min=yToTime(e.clientY - nowDrag.stageTop);
+  var lastEnd=L.bands.length ? L.bands[L.bands.length-1].vend : L.deadline;
+  state.now=Math.max(L.plannedStart-15, Math.min(lastEnd+45, min));
+  state.simBase = state.now; state.wallBase = Date.now();
+
+  // 拨动时间时正在做的那一项也会跟着长，所以整块重建
+  refreshActive();
+  checkAlerts();
+  state.layout=computeLayout(); renderBands(); renderChrome();
+});
+document.addEventListener('pointerup', function(){
+  if(!nowDrag) return;
+  nowDrag=null;
+  state.layout=computeLayout(); renderBands(); renderChrome();
+});
+
+refreshActive();
+render();
+window.addEventListener('resize', function(){ state.layout=computeLayout(); renderBands(); renderChrome(); });
+</script>
+</body>
+</html>
