@@ -119,7 +119,7 @@ final class WebHostController: UIViewController {
         super.viewDidLoad()
 
         // 与 Vue 产物的画布同色，避免初始化瞬间露出白底。
-        let canvas = UIColor(red: 1.000, green: 0.985, blue: 0.925, alpha: 1)
+        let canvas = UIColor(red: 245.0 / 255.0, green: 247.0 / 255.0, blue: 251.0 / 255.0, alpha: 1)
         view.backgroundColor = canvas
         webView.isOpaque = false
         webView.backgroundColor = canvas
@@ -425,7 +425,7 @@ extension WebHost {
         private func requestAccount(id: String, params: [String: Any]) async {
             let allowed: [String: Set<String>] = [
                 "/me": ["GET"], "/login": ["POST"], "/register": ["POST"],
-                "/logout": ["POST"], "/snapshot": ["GET", "PUT"]
+                "/logout": ["POST"], "/snapshot": ["GET", "PUT"], "/parse": ["POST"]
             ]
             guard let path = params["path"] as? String,
                   let method = params["method"] as? String,
@@ -436,7 +436,7 @@ extension WebHost {
             }
             var request = URLRequest(url: url)
             request.httpMethod = method
-            request.timeoutInterval = 20
+            request.timeoutInterval = path == "/parse" ? 60 : 20
             request.setValue("https://47.104.95.146", forHTTPHeaderField: "Origin")
             if let body = params["body"] as? String {
                 guard body.utf8.count <= 2_000_000 else { reply(id: id, ok: false, error: "账号数据过大"); return }

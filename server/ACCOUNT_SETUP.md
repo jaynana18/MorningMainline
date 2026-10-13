@@ -24,6 +24,7 @@ account-service.example 为独立 systemd 服务配置；现有模型代理和 D
 location /api/account/ {
     client_max_body_size 2m;
     proxy_pass http://127.0.0.1:8788;
+    proxy_read_timeout 65s;
     proxy_set_header Host $host;
 }
 ```
@@ -33,3 +34,15 @@ location /api/account/ {
 Vue HTTP(S) 浏览器通过同源 /api/account/ 支持账号同步。原生 file:// 打包版使用 account.request 桥接，由 URLSession 访问固定 HTTPS 地址 https://47.104.95.146/api/account，凭据保留在原生 Cookie 存储，不向 JS 回传；无需开放 null Origin 或关闭 HTTPS 证书校验。原生 location.current 桥接通过 CoreLocation 按需申请使用期间定位权限，再交给高德转换坐标；拒绝定位后仍可名称搜索与手动选择出发地。
 
 公网 HTTPS 注册/登录/快照保存读取/退出及原生编译已经检查。手机实机授权、登录重启后凭据保持、后台提醒和 Watch 仍需真机验证；Watch 保留既有原生同步链路。暂未提供忘记密码/邮件验证。
+
+## AI主解析与缓存（2026-10-13）
+
+创建流程通过已登录账号的 POST /api/account/parse 提交整句。AI 返回准备任务、顺序地点、各地点活动时长及截止时分。本机只校验结构、换算分钟为秒和生成当前日期的时间，不再用正则拆地点或选择规则解析结果。失败明确提示重试，不缓存失败数据。
+
+parse_cache 表按 owner_id、输入文本 SHA256 和解析版本分别保存经过校验的结构；每个账号保留最近200条。缓存不包含具体日期、任务ID、定位或路线。相同输入的并发请求在服务进程内合并；命中缓存不会请求模型。调整提示词/字段/模型时须更新 parse-contract.mjs 中 PARSER_VERSION。
+
+缓存仅表示复用已校验的格式，不保证AI语义始终正确；生成结果仍交给用户预览确认。通勤时间由高德独立实时查询。新增账号接口要求网页登录或App原生Cookie；旧匿名模型代理仍兼容已有版本，并保留原来的请求限额。
+
+模型代理和账号服务都要安装同一份 parse-contract.mjs。deploy-ai-parse.sh 更新前会备份脚本、Nginx配置和SQLite数据库，更新两个服务并将账号反代等待时间设为65秒；失败恢复服务代码与Nginx配置，数据库只做添加缓存表的兼容迁移。
+
+验证：客户端计划校验/缓存日期/新任务ID测试、模拟模型的账号缓存隔离/并发去重/失败不缓存测试，以及云端真实模型原句测试均通过。云端原句中凯德80分钟、宜家60分钟，第二次请求 cached=true。临时验证账号已清理。

@@ -4,6 +4,7 @@ test -x /opt/morning-mainline-model/node/bin/node
 install -d -m 755 /opt/morning-mainline-account
 install -d -o www-data -g www-data -m 700 /opt/morning-mainline-account/data
 install -m 644 /opt/morning-mainline-account/incoming/account-server.mjs /opt/morning-mainline-account/account-server.mjs
+install -m 644 /opt/morning-mainline-account/incoming/parse-contract.mjs /opt/morning-mainline-account/parse-contract.mjs
 if [ ! -f /opt/morning-mainline-account/.env.account ]; then
   install -m 600 /opt/morning-mainline-account/incoming/.env.account.example /opt/morning-mainline-account/.env.account
 fi
@@ -17,11 +18,12 @@ if ! grep -q 'location /api/account/' "$task_nginx_config"; then
         client_max_body_size 2m;\
         proxy_pass http://127.0.0.1:8788;\
         proxy_set_header Host $host;\
-        proxy_read_timeout 25s;\
+        proxy_read_timeout 65s;\
     }' "$task_nginx_config"
   if ! nginx -t; then cp -p "$task_nginx_backup" "$task_nginx_config"; exit 1; fi
 fi
 systemctl daemon-reload
+sed -i 's/proxy_read_timeout 25s;/proxy_read_timeout 65s;/' "$task_nginx_config"
 systemctl enable --now morning-mainline-account.service
 systemctl is-active --quiet morning-mainline-account.service
 nginx -t

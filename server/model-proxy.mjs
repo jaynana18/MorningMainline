@@ -1,4 +1,5 @@
 import http from 'node:http';
+import { itineraryPrompt, decodePlan } from './parse-contract.mjs';
 
 // 仅监听本机，由 Nginx/Vite 提供同源入口。Key 不进入前端构建。
 const key = process.env.COSMO_MIND_API_KEY?.trim();
@@ -71,7 +72,7 @@ http.createServer(async (req, res) => {
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
       body: JSON.stringify({
         model: 'cosmo-mind-coder',
-        messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: messages[1].content }],
+        messages: [{ role: 'system', content: body.task_format === 'itinerary-ai-v1' ? itineraryPrompt : systemPrompt }, { role: 'user', content: messages[1].content }],
         temperature: 0,
         max_tokens: 4096,
         ...(body.response_format?.type === 'json_object'
@@ -84,11 +85,13 @@ http.createServer(async (req, res) => {
       return send(res, upstream.status, { error: '模型接口请求失败' });
     }
     const data = await upstream.json();
+    const content = data.choices?.[0]?.message?.content || '';
+    if (body.task_format === 'itinerary-ai-v1') decodePlan(content);
     // 不向浏览器回传网关内部信息或思考链。
-    send(res, 200, { choices: [{ message: { content: data.choices?.[0]?.message?.content || '' } }] });
+    send(res, 200, { choices: [{ message: { content } }] });
   } catch (error) {
     console.error('Model proxy failed:', error.name);
-    send(res, 502, { error: '模型暂时不可用，已回退本机规则' });
+    send(res, 502, { error: 'AI解析暂时不可用，请重试或补充描述' });
   } finally {
     active--;
   }
