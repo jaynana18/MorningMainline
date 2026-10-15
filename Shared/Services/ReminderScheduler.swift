@@ -22,7 +22,9 @@ actor ReminderScheduler {
     static let taskLead: TimeInterval = 2 * 60
     /// 通勤出发提醒的提前量上限。再早提醒反而会被忽略。
     static let commuteLead: TimeInterval = 2 * 60
-    /// 超时提醒的重提间隔（与 `web/src/core/reminders.ts:OVERDUE_REPEAT_SECONDS` 一致）。
+    /// 超时提醒的**默认**重提间隔（秒）。真值已移到 `OverduePolicy`（用户可配，存 App Group）——
+    /// 这个常量只留作「默认策略」的说明性引用，**排程逻辑不再直接用它**，
+    /// 免得两处各持一个真值、改了一处没改另一处。
     static let overdueRepeat: TimeInterval = 2 * 60
     /// 超时提醒预排的轮数上限。App 退到后台后 JS 定时器会被挂起，
     /// 只有系统排期的通知才响得起来 —— 所以必须一次排好一串。
@@ -192,6 +194,11 @@ actor ReminderScheduler {
     ///
     /// 第 0 轮不动：`dueAt` 那一刻已经由 `scheduleTask` 的到点通知响过了
     /// （`dueAt == startedAt + duration`），再从第 0 秒起算会在同一秒弹两条。
+    ///
+    /// ⚠️ 间隔由用户在个人中心配置（`OverduePolicy`，两阶段，存 App Group）。
+    /// 与 JS 侧 `web/src/core/reminders.ts:overdueFireOffsets` **同口径**，改动要两边同步。
+    /// 每次排程现读 App Group：改完设置会立刻重排（`RoutineStore.setOverduePolicy`
+    /// → `rescheduleIfNeeded`），用户不需要重开会话或重启 App。
     private func scheduleOverdueRepeats(
         _ progress: StepProgress,
         session: RoutineSession,
@@ -202,12 +209,17 @@ actor ReminderScheduler {
 
         let overdueFrom = startedAt.addingTimeInterval(progress.step.duration)
         let thread = "morning-mainline-overdue-\(progress.id.uuidString)"
+        let offsets = SharedSettingsStore.current.overduePolicy
+            .fireOffsets(limit: Self.overdueRepeatCount)
 
-        for round in 0..<Self.overdueRepeatCount {
-            let fireAt = overdueFrom.addingTimeInterval(TimeInterval(round + 1) * Self.overdueRepeat)
+        for (round, offset) in offsets.enumerated() {
+            let fireAt = overdueFrom.addingTimeInterval(offset)
             guard fireAt > now else { continue }
 
-            let minutes = Int((Self.overdueRepeat * TimeInterval(round + 1) / 60).rounded(.up))
+            // 🔴 超时分钟数一律 `floor`，**权威来源是界面 `TimelineCard.overdueText`**。
+            // 原实现用 `.rounded(.up)`（= ceil）：在 2 分钟整倍数网格上恰好等价，
+            // 但一旦间隔被用户改成奇数分钟，ceil 就会让播报比页面多 1 分钟。
+            let minutes = max(1, Int(offset / 60))
             let content = UNMutableNotificationContent()
             content.title = "不跑偏 · 超时了"
             content.body = "“\(progress.step.title)”已经超了 \(minutes) 分钟，先把它收尾。"

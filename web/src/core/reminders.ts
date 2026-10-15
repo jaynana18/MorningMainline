@@ -379,8 +379,137 @@ export function taskAdvanceBody(title: string): string {
  */
 export const OVERDUE_TITLE = '不跑偏 · 超时了';
 
-/** 超时提醒的重提间隔（秒）。与 Swift `ReminderScheduler.overdueRepeat` 一致。 */
+/** 超时提醒的重提间隔（秒）**默认值**。用户可在个人中心改（见 {@link OverduePolicy}）。 */
 export const OVERDUE_REPEAT_SECONDS = 2 * 60;
+
+// ---------------------------------------------------------------------------
+// 超时提醒间隔策略（2026-10-15 新增：用户可配置，分两阶段）
+// ---------------------------------------------------------------------------
+
+/**
+ * 超时提醒的间隔策略（单位：分钟）。**分两阶段**，阶段二是「越拖越密」：
+ * - 阶段一：超时还没到 `switchAfter` 分钟 → 每 `earlyInterval` 分钟提醒一次；
+ * - 阶段二：超时满了 `switchAfter` 分钟 → 改用 `lateInterval` 分钟一次。
+ *
+ * 用户原话：「比如，超时 10 分钟之内，2 分钟提醒一次；超时 10 分钟以上，1 分钟提醒一次」
+ * → `{ earlyInterval: 2, switchAfter: 10, lateInterval: 1 }`。
+ *
+ * ⚠️ **默认值刻意保持「全程 2 分钟」**（两阶段同值），这样老用户升级后行为完全不变，
+ * 新用户想要的「越拖越密」需要自己去设置里开 —— 不擅自改变既有提醒节奏。
+ */
+export interface OverduePolicy {
+  /** 阶段一的间隔（分钟）。 */
+  earlyInterval: number;
+  /** 从超时第几分钟起切换到阶段二。 */
+  switchAfter: number;
+  /** 阶段二的间隔（分钟）。 */
+  lateInterval: number;
+}
+
+/** 两个间隔的可选范围（分钟）。用户原话：「最小设置 1 分钟 最大设置 10 分钟」。 */
+export const OVERDUE_INTERVAL_RANGE = { min: 1, max: 10 } as const;
+/** 切换点的可选范围（分钟）。上限给 60，够覆盖「拖了一小时」的极端情形。 */
+export const OVERDUE_SWITCH_RANGE = { min: 1, max: 60 } as const;
+
+export const DEFAULT_OVERDUE_POLICY: OverduePolicy = {
+  earlyInterval: 2,
+  switchAfter: 10,
+  lateInterval: 2,
+};
+
+/** 把任意输入夹到合法分钟数；非法值（NaN / 非数字 / 越界）一律回落 `fallback`。 */
+function clampMinutes(value: unknown, min: number, max: number, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return fallback;
+  }
+  const rounded = Math.round(value);
+  return Math.min(max, Math.max(min, rounded));
+}
+
+/**
+ * 归一化策略。**必须容忍脏输入**：这份值要经 localStorage / App Group / WCSession
+ * 三道持久化，任何一道留下半截数据都不该让提醒引擎失效。
+ * 缺字段或越界一律回落到默认值。
+ */
+export function normalizeOverduePolicy(input: Partial<OverduePolicy> | null | undefined): OverduePolicy {
+  return {
+    earlyInterval: clampMinutes(
+      input?.earlyInterval,
+      OVERDUE_INTERVAL_RANGE.min,
+      OVERDUE_INTERVAL_RANGE.max,
+      DEFAULT_OVERDUE_POLICY.earlyInterval,
+    ),
+    switchAfter: clampMinutes(
+      input?.switchAfter,
+      OVERDUE_SWITCH_RANGE.min,
+      OVERDUE_SWITCH_RANGE.max,
+      DEFAULT_OVERDUE_POLICY.switchAfter,
+    ),
+    lateInterval: clampMinutes(
+      input?.lateInterval,
+      OVERDUE_INTERVAL_RANGE.min,
+      OVERDUE_INTERVAL_RANGE.max,
+      DEFAULT_OVERDUE_POLICY.lateInterval,
+    ),
+  };
+}
+
+/**
+ * 按策略算出「第几轮在第几秒超时时刻触发」。
+ *
+ * 返回升序的秒数数组，第 i 项即第 i 轮（0 起算）的触发点。**第 0 轮不是超时那一刻**，
+ * 而是「超时满 `earlyInterval` 分钟」—— 这一点不能改：任务到点的提醒已经在 dueAt
+ * 响过，若超时提醒也从第 0 秒起算，同一秒会弹两条（一条「该做这个了」、一条「已经超时了」）。
+ *
+ * @param policy 间隔策略
+ * @param limit 最多返回几项（原生排期有轮数上限，见 `ReminderScheduler.overdueRepeatCount`）
+ */
+export function overdueFireOffsets(policy: OverduePolicy, limit: number): number[] {
+  const early = policy.earlyInterval * 60;
+  const late = policy.lateInterval * 60;
+  const switchAt = policy.switchAfter * 60;
+  const offsets: number[] = [];
+
+  // 阶段一：严格早于切换点。用 `Math.ceil` 求项数与下面的解析式保持同一口径。
+  for (let t = early; t < switchAt && offsets.length < limit; t += early) {
+    offsets.push(t);
+  }
+  // 阶段二：从切换点起按 late 递推。**从切换点本身开始**（而不是接着阶段一的下一个），
+  // 这样两阶段无缝衔接，不会出现「9 分钟响过之后要等到 12 分钟」的空档。
+  for (let t = switchAt; offsets.length < limit; t += late) {
+    offsets.push(t);
+  }
+  return offsets;
+}
+
+/**
+ * 超时第几轮：0 起算。**未达第一轮触发点返回 -1**（此时不提醒）。
+ *
+ * ⚠️ 用**解析式**而不是先 `overdueFireOffsets` 再查表：阶段二理论上是无限的，
+ * 把数组物化出来既浪费又可能被 `limit` 截断而算错。
+ * 两阶段的分界必须与 {@link overdueFireOffsets} 完全一致，改动要同步。
+ */
+export function overdueRound(
+  overdueSeconds: number,
+  policy: OverduePolicy = DEFAULT_OVERDUE_POLICY,
+): number {
+  const early = policy.earlyInterval * 60;
+  const late = policy.lateInterval * 60;
+  const switchAt = policy.switchAfter * 60;
+  // 阶段一的轮数：`early * k < switchAt` 的最大 k。
+  const earlyRounds = Math.max(0, Math.ceil(switchAt / early) - 1);
+
+  if (overdueSeconds >= switchAt) {
+    return earlyRounds + Math.floor((overdueSeconds - switchAt) / late);
+  }
+  if (earlyRounds === 0) {
+    return -1; // 阶段一为空（间隔比切换点还大），此刻尚未到任何触发点。
+  }
+  if (overdueSeconds < early) {
+    return -1;
+  }
+  return Math.floor(overdueSeconds / early) - 1;
+}
 
 /** 超时提醒正文。逐字对应 Swift `overdueBody(title:minutes:)`。 */
 export function overdueBody(title: string, minutes: number): string {
@@ -440,20 +569,13 @@ export function overdueReminder(
 }
 
 /**
- * 超时第几轮：0 起算，**首次出现在超时满 2 分钟时**，之后每 2 分钟一轮。
- * 不满 2 分钟返回 -1（此时不提醒）。
+ * 超时第几轮的口径说明（**实现已上移到 {@link overdueRound}**，见「超时提醒间隔策略」一节）。
  *
- * 为什么首次不是「刚超时那一刻」：任务到点的提醒（`taskReminder`）已经在
- * `dueAt` 那一刻响过了，而 `dueAt` 就是 `startedAt + duration`。若超时提醒也从
- * 第 0 秒起算，同一秒会弹两条 —— 一条「该做这个了」、一条「已经超时了」。
- * 用户的原话也是「每超时 2 分钟提醒一次」，从 2 分钟起算正好。
+ * 关键点复述：首次不是「刚超时那一刻」，而是「超时满阶段一的间隔」。
+ * 任务到点的提醒（`taskReminder`）已经在 `dueAt` 那一刻响过了，而 `dueAt` 就是
+ * `startedAt + duration`。若超时提醒也从第 0 秒起算，同一秒会弹两条 ——
+ * 一条「该做这个了」、一条「已经超时了」。用户的原话也是「每超时 N 分钟提醒一次」。
  */
-export function overdueRound(overdueSeconds: number): number {
-  if (overdueSeconds < OVERDUE_REPEAT_SECONDS) {
-    return -1;
-  }
-  return Math.floor(overdueSeconds / OVERDUE_REPEAT_SECONDS) - 1;
-}
 
 // ---------------------------------------------------------------------------
 // 语音播报正文（2026-10-16 新增）

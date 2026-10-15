@@ -11,6 +11,7 @@
 import type { RoutineSession, RoutineSnapshot, ParseResult, DeviceRole } from '../core/types';
 import { randomUUID } from '../core/types';
 import { decodeSnapshot, encodeSnapshot } from '../core/serialization';
+import { normalizeOverduePolicy } from '../core/reminders';
 import type {
   BridgeCapabilities,
   DeviceInfo,
@@ -211,6 +212,8 @@ export class BrowserBridge implements PlatformBridge {
         // 字段缺失（旧版本写下的数据）时回落默认开，而不是当成 false ——
         // `boolean` 用 `!== false` 而不是 `=== true`，正是为了这一步。
         speechEnabled: parsed.speechEnabled !== false,
+        // 同样容忍缺键：老数据没有 `overduePolicy`，`normalize` 会补成默认（全程 2 分钟）。
+        overduePolicy: normalizeOverduePolicy(parsed.overduePolicy),
       };
     } catch {
       return { ...EMPTY_SHARED_SETTINGS };

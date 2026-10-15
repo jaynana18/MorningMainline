@@ -16,6 +16,7 @@ import type {
   RoutineSession,
   RoutineSnapshot,
 } from '../core/types';
+import { DEFAULT_OVERDUE_POLICY, type OverduePolicy } from '../core/reminders';
 import { createBrowserBridge } from './browser';
 import { createWebViewBridge } from './webview';
 import { withAccountSync } from './account';
@@ -86,6 +87,13 @@ export interface SharedSettings {
    * 本开关管的是 App 自己念的那一路（亮屏也响）。两者互不影响，用户可能同时开着。
    */
   speechEnabled: boolean;
+  /**
+   * 超时提醒的间隔策略（分两阶段，见 `core/reminders.ts` 的 `OverduePolicy`）。
+   *
+   * 与 `speechEnabled` 一样属于「用户自定义提醒方式」，随账号走。
+   * 缺省即「全程 2 分钟」（`DEFAULT_OVERDUE_POLICY`），与老版本行为一致。
+   */
+  overduePolicy: OverduePolicy;
 }
 
 /** 未配置时的空设置。浏览器宿主的回落值。 */
@@ -94,6 +102,7 @@ export const EMPTY_SHARED_SETTINGS: SharedSettings = {
   travelMode: 'driving',
   // 默认开：用户装完就该听到播报，而不是先去设置里找开关。
   speechEnabled: true,
+  overduePolicy: { ...DEFAULT_OVERDUE_POLICY },
 };
 
 /**

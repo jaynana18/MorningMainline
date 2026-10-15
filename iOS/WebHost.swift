@@ -436,6 +436,12 @@ extension WebHost {
                     "amapKey": settings.amapKey,
                     "travelMode": settings.travelMode,
                     "speechEnabled": settings.speechEnabled,
+                    // 超时提醒间隔策略：嵌套字典而非扁平字段，与 JS 侧 `OverduePolicy` 一一对应。
+                    "overduePolicy": [
+                        "earlyInterval": settings.overduePolicy.earlyInterval,
+                        "switchAfter": settings.overduePolicy.switchAfter,
+                        "lateInterval": settings.overduePolicy.lateInterval,
+                    ],
                 ])
 
             case "settings.write":
@@ -447,6 +453,11 @@ extension WebHost {
                 // 只有显式传了布尔值才改动，避免旧的 JS 包不带该字段时把开关误关掉。
                 if let speech = params["speechEnabled"] as? Bool {
                     store.setSpeechEnabled(speech)
+                }
+                // 同理：旧的 JS 包不带该字段，或字段被拆坏时**整项跳过**，
+                // 而不是用默认值覆盖用户已保存的配置。
+                if let policy = Self.decodeOverduePolicy(params["overduePolicy"]) {
+                    store.setOverduePolicy(policy)
                 }
                 reply(id: id)
 
@@ -551,6 +562,19 @@ extension WebHost {
                   let data = try? JSONSerialization.data(withJSONObject: raw)
             else { return nil }
             return try? JSONDecoder().decode(RoutineSession.self, from: data)
+        }
+
+        /// `settings.write` 里的 `overduePolicy` —— 走 JSONSerialization 而不是强转字典：
+        /// 消息经过 `WKScriptMessage` 桥接后是 `NSDictionary`/`NSNumber`，逐字段 `as? Int`
+        /// 在「JS 传了浮点」时静默拿到 nil，那样会**用默认值覆盖用户配置**且毫无提示。
+        ///
+        /// 返回 nil 表示「这次不该改」：字段缺失/形状不对时整项跳过，保住已有配置。
+        private static func decodeOverduePolicy(_ raw: Any?) -> OverduePolicy? {
+            guard let raw, !(raw is NSNull),
+                  let data = try? JSONSerialization.data(withJSONObject: raw),
+                  let decoded = try? JSONDecoder().decode(OverduePolicy.self, from: data)
+            else { return nil }
+            return decoded.normalized
         }
 
         private static func notificationsAuthorized() async -> Bool {

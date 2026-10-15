@@ -25,11 +25,12 @@ function focusRequest(overrides: Partial<FocusRequest> = {}): FocusRequest {
   };
 }
 
-/** 构造裁决上下文。 */
+/** 构造裁决上下文。默认 `ready: true` —— 绝大多数用例都在测「数据已加载」后的正常裁决。 */
 function context(overrides: Partial<FocusContext> = {}): FocusContext {
   return {
     sessionID: 's1',
     progressIDs: ['p1', 'p2'],
+    ready: true,
     ...overrides,
   };
 }
@@ -129,6 +130,56 @@ describe('views/reminder/helpers — resolveFocusAction', () => {
         context({ sessionID: 's2', progressIDs: [] }),
       ),
     ).toBe('stale');
+  });
+
+  // ---- 2026-10-15 修「点通知停在主页」：数据未就绪时必须保留请求，不能判 stale ----
+  //
+  // 冷启动链路：原生在 `viewDidLoad` 就 `emit('notification.opened')`，而 JS 的
+  // `store.init()` 是异步的。事件先到 → 那一刻 `session` 为 null。旧实现直接用
+  // 这个 null 去裁决 → 返回 `stale` → `clearFocusRequest()` → 请求被**静默丢弃**，
+  // 用户点通知只看到主页。`ready` 字段就是为了把「还没读到」与「确实已失效」分开。
+
+  it('🔴 ready=false · 会话为空 → wait（不是 stale，请求必须留着）', () => {
+    expect(
+      resolveFocusAction(
+        focusRequest({ sessionID: 's1' }),
+        context({ ready: false, sessionID: null, progressIDs: [] }),
+      ),
+    ).toBe('wait');
+  });
+
+  it('🔴 ready=false · 会话 id 对不上也不判 stale（此时尚不知真假）', () => {
+    expect(
+      resolveFocusAction(
+        focusRequest({ sessionID: 's1' }),
+        context({ ready: false, sessionID: 's-other', progressIDs: [] }),
+      ),
+    ).toBe('wait');
+  });
+
+  it('🔴 ready=false · task 回跳的 progressID 不在（空）列表里 → 仍为 wait', () => {
+    expect(
+      resolveFocusAction(
+        focusRequest({ progressID: 'p1' }),
+        context({ ready: false, progressIDs: [] }),
+      ),
+    ).toBe('wait');
+  });
+
+  it('ready=false 但 request 为 null → ignore（空请求无需等待）', () => {
+    expect(resolveFocusAction(null, context({ ready: false, sessionID: null, progressIDs: [] }))).toBe(
+      'ignore',
+    );
+  });
+
+  it('🔴 同一条请求：ready=false 时 wait，ready 翻转后给出确定结论（证明可收敛）', () => {
+    const request = focusRequest({ progressID: 'p1' });
+    expect(resolveFocusAction(request, context({ ready: false, progressIDs: [] }))).toBe('wait');
+    expect(
+      resolveFocusAction(request, context({ ready: true, sessionID: 's1', progressIDs: ['p1'] })),
+    ).toBe('navigate');
+    // 数据加载完仍不匹配 → 这次才是真的 stale，可以丢弃。
+    expect(resolveFocusAction(request, context({ ready: true, progressIDs: ['p9'] }))).toBe('stale');
   });
 });
 

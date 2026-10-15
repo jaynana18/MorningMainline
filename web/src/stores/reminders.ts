@@ -23,10 +23,12 @@ import { ref } from 'vue';
 import { defineStore } from 'pinia';
 import {
   allReminders,
+  normalizeOverduePolicy,
   overdueReminder,
   overdueRound,
   overdueSecondsOf,
   speechText,
+  type OverduePolicy,
   type ReminderMessage,
 } from '../core/reminders';
 import type { PlatformBridge } from '../platform/bridge';
@@ -188,10 +190,21 @@ export const useRemindersStore = defineStore('reminders', () => {
   }
 
   /**
+   * 当前的超时提醒间隔策略（用户可在个人中心配置）。
+   *
+   * 每次判定都从 store 现读，**不缓存**：用户在设置页改完立刻生效，
+   * 不需要重开会话或重启 App。`normalizeOverduePolicy` 容忍脏输入（老数据缺键、
+   * 手改越界值），越界一律夹回合法范围。
+   */
+  function overduePolicy(): OverduePolicy {
+    return normalizeOverduePolicy(routineStore.settings.overduePolicy);
+  }
+
+  /**
    * 超时循环提醒的候选。
    *
    * 与前两类提醒的关键差别：**它不看 `firedKeys` 去重，而是看「第几轮」**。
-   * 每一轮有自己的 key（`overdue:<id>:<round>`），所以天然「每 2 分钟重新投递一次」；
+   * 每一轮有自己的 key（`overdue:<id>:<round>`），所以触发点由策略决定；
    * 反过来，同一轮即使 tick 了很多次也只投递一次。
    *
    * 只对**当前任务**判定（与 `focusedTask` 同口径）：上一项没结束就提醒下一项，
@@ -207,7 +220,7 @@ export const useRemindersStore = defineStore('reminders', () => {
       return null;
     }
     const seconds = overdueSecondsOf(current, now);
-    const round = overdueRound(seconds);
+    const round = overdueRound(seconds, overduePolicy());
     if (round < 0) {
       return null;
     }

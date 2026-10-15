@@ -102,6 +102,18 @@ final class RoutineStore: ObservableObject {
         connectivity.publish(next)
     }
 
+    /// 改超时提醒的间隔策略（两阶段）。落本机 App Group 并广播，两端保持一致。
+    ///
+    /// ⚠️ 改完要**立刻重排通知**：后台通知是原生一次排好的一串（`scheduleOverdueRepeats`），
+    /// 不重排的话新间隔要等下一次进前台才生效 —— 用户会以为设置没保存。
+    func setOverduePolicy(_ policy: OverduePolicy) {
+        var next = SharedSettingsStore.updateOverduePolicy(policy)
+        next.originID = deviceID
+        settings = next
+        connectivity.publish(next)
+        rescheduleIfNeeded()
+    }
+
     /// 采纳对端同步来的设置。丢弃自己的回声，否则两端会互相覆盖。
     private func adoptSettings(_ incoming: MainlineSettings) {
         guard SharedSettingsStore.adopt(incoming, localDeviceID: deviceID) else { return }

@@ -19,6 +19,35 @@
           应用内语音播报
         </label>
         <p class="mm-hint profile-data-note">提醒弹出时用语音念出内容，亮屏使用中同样出声。关闭后只保留弹窗，不再出声。</p>
+
+        <!-- 超时提醒频率：两阶段。第二行的「切换点」刻意做成只读文本，
+             保证两行指的是**同一个**数字 —— 若两边各放一个 select，用户改了一行
+             会看到另一行没变，以为设置没生效。 -->
+        <div class="profile-overdue">
+          <p class="profile-overdue-heading">超时提醒频率</p>
+          <p class="mm-hint profile-overdue-intro">任务超时后每隔多久再提醒一次。可以分两段：拖得越久、催得越紧。</p>
+          <div class="profile-overdue-row">
+            <span class="profile-overdue-label">超时不到</span>
+            <select v-model.number="overdueSwitch" class="mm-input profile-overdue-select" data-testid="overdue-switch">
+              <option v-for="minute in SWITCH_OPTIONS" :key="minute" :value="minute">{{ minute }} 分钟</option>
+            </select>
+            <span class="profile-overdue-tail">每</span>
+            <select v-model.number="overdueEarly" class="mm-input profile-overdue-select" data-testid="overdue-early">
+              <option v-for="minute in INTERVAL_OPTIONS" :key="minute" :value="minute">{{ minute }} 分钟</option>
+            </select>
+            <span class="profile-overdue-tail">提醒一次</span>
+          </div>
+          <div class="profile-overdue-row">
+            <span class="profile-overdue-label">超时满</span>
+            <span class="profile-overdue-value">{{ overdueSwitch }} 分钟</span>
+            <span class="profile-overdue-tail">每</span>
+            <select v-model.number="overdueLate" class="mm-input profile-overdue-select" data-testid="overdue-late">
+              <option v-for="minute in INTERVAL_OPTIONS" :key="minute" :value="minute">{{ minute }} 分钟</option>
+            </select>
+            <span class="profile-overdue-tail">提醒一次</span>
+          </div>
+          <p class="mm-hint profile-overdue-summary" data-testid="overdue-summary">{{ overdueSummary }}</p>
+        </div>
       </section>
       <section class="mm-section">
         <div class="mm-section-heading"><h3>通勤设置</h3><SessionIcon name="route" :size="18" /></div>
@@ -52,6 +81,12 @@ import { computed, ref, watch } from 'vue';
 import { account, accountRequest } from '../platform/account';
 import SessionIcon from './session/SessionIcon.vue';
 import { useRoutineStore } from '../stores/routine';
+import {
+  OVERDUE_INTERVAL_RANGE,
+  OVERDUE_SWITCH_RANGE,
+  normalizeOverduePolicy,
+  type OverduePolicy,
+} from '../core/reminders';
 const store = useRoutineStore();
 const busy = ref(false), error = ref('');
 
@@ -76,6 +111,56 @@ const travelMode = computed({
 const speechEnabled = computed({
   get: () => store.settings.speechEnabled,
   set: (value: boolean) => void store.saveSettings({ speechEnabled: value }),
+});
+
+/**
+ * 超时提醒频率（两阶段）。用户原话：「超时 10 分钟之内 2 分钟提醒一次，
+ * 超时 10 分钟以上 1 分钟提醒一次，这个由用户设置，最小 1 分钟最大 10 分钟」。
+ *
+ * ⚠️ getter **必须过 `normalizeOverduePolicy`**：`store.settings` 里那一份来自
+ * App Group / localStorage，可能是旧版本写的（整键缺失）或被人手改过（越界值）。
+ * 不归一化时 `v-model.number` 会绑到 `undefined` → select 显示空 → 用户以为设置丢了。
+ */
+const overduePolicy = computed(() => normalizeOverduePolicy(store.settings.overduePolicy));
+
+/** 改一项就写回**完整**策略对象：桥是整字段替换，只传一半会把另外两项抹掉。 */
+function patchOverdue(patch: Partial<OverduePolicy>): void {
+  void store.saveSettings({ overduePolicy: { ...overduePolicy.value, ...patch } });
+}
+
+const overdueEarly = computed({
+  get: () => overduePolicy.value.earlyInterval,
+  set: (value: number) => patchOverdue({ earlyInterval: Number(value) }),
+});
+
+const overdueSwitch = computed({
+  get: () => overduePolicy.value.switchAfter,
+  set: (value: number) => patchOverdue({ switchAfter: Number(value) }),
+});
+
+const overdueLate = computed({
+  get: () => overduePolicy.value.lateInterval,
+  set: (value: number) => patchOverdue({ lateInterval: Number(value) }),
+});
+
+function range(min: number, max: number): number[] {
+  return Array.from({ length: max - min + 1 }, (_, index) => min + index);
+}
+
+/** 两个间隔都是 1–10 分钟（用户给的上下限）；切换点放宽到 1–60，够覆盖「拖了一小时」。 */
+const INTERVAL_OPTIONS = range(OVERDUE_INTERVAL_RANGE.min, OVERDUE_INTERVAL_RANGE.max);
+const SWITCH_OPTIONS = range(OVERDUE_SWITCH_RANGE.min, OVERDUE_SWITCH_RANGE.max);
+
+/**
+ * 把生效节奏用一句话说清楚 —— select 并排看容易误读成「两个独立规则」，
+ * 这里明确「先是 A，满 N 分钟后改成 B」。两段同值时只报一个数，不啰嗦。
+ */
+const overdueSummary = computed(() => {
+  const { earlyInterval, switchAfter, lateInterval } = overduePolicy.value;
+  if (earlyInterval === lateInterval) {
+    return `当前：全程每 ${earlyInterval} 分钟提醒一次。`;
+  }
+  return `当前：超时不到 ${switchAfter} 分钟每 ${earlyInterval} 分钟提醒一次，之后每 ${lateInterval} 分钟提醒一次。`;
 });
 
 // 首次进入本页时补一次读取：设置由 `performInit` 载入，但用户可能在 init 完成前
@@ -118,4 +203,14 @@ async function logout(): Promise<void> {
 .profile-logout { width: 100%; }
 /* 开关行：标签是整行可点的，行高给足以便触摸。 */
 .profile-toggle { display: flex; align-items: center; gap: 10px; margin: 4px 0; padding: 10px 0; font-size: 14px; color: var(--mm-ink); cursor: pointer; }
+/* 超时频率：两行「自然语言 + 内联 select」，比三个带标题的表单项好读。 */
+.profile-overdue { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--mm-border); }
+.profile-overdue-heading { margin: 0; font-size: 13px; font-weight: 600; color: var(--mm-ink); }
+.profile-overdue-intro { margin: 6px 0 14px; }
+.profile-overdue-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 0; font-size: 13px; color: #8390a4; }
+.profile-overdue-label { min-width: 52px; }
+.profile-overdue-value { min-width: 62px; font-variant-numeric: tabular-nums; color: var(--mm-ink); }
+.profile-overdue-tail { color: #8390a4; }
+.profile-overdue-select { width: auto; min-width: 88px; padding: 6px 8px; font-size: 13px; }
+.profile-overdue-summary { margin: 12px 0 0; }
 </style>

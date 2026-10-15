@@ -13,7 +13,7 @@
 import type { FocusRequest, ReminderMessage } from '../../stores/reminders';
 
 /** 通知点击回跳的裁决结果。 */
-export type FocusAction = 'ignore' | 'navigate' | 'stale';
+export type FocusAction = 'ignore' | 'navigate' | 'stale' | 'wait';
 
 /** 判定回跳是否「属于当前这次执行」所需的上下文。 */
 export interface FocusContext {
@@ -21,6 +21,15 @@ export interface FocusContext {
   sessionID: string | null;
   /** 当前活动会话的全部进度项 id；无会话时为 []。 */
   progressIDs: readonly string[];
+  /**
+   * 会话数据是否已加载完成（`routineStore.ready`）。
+   *
+   * 🔴 **必须有这个字段**（2026-10-15 修「点通知停在主页」）：
+   * 冷启动点通知时，原生事件会先于 `store.init()` 到达。那一刻 `session` 是 null，
+   * 但那只代表「还没读到」，不代表「这条通知已失效」。若不区分，`resolveFocusAction`
+   * 会返回 `stale` 把请求**静默丢弃**，用户就停在首页 —— 而正确行为是再等一会。
+   */
+  ready: boolean;
 }
 
 /**
@@ -32,13 +41,14 @@ export interface FocusContext {
  * 故对 task 回跳改用「该 progressID 是否仍属于当前会话」来判 stale。
  *
  * - `request === null` → 'ignore'
+ * - **`ready === false` → 'wait'**（数据未就绪，无从判定，等 `ready` 后再评）
  * - 带 sessionID 且与当前不等 → 'stale'（里程碑回跳，或会话已换）
  * - 带 progressID 但不在当前会话的 progress 里 → 'stale'
  *   （该任务所属的会话已结束/已被替换，或该进度项已从本次计划中删除）
  * - 其余 → 'navigate'
  *
  * @param request 待消费的通知回跳请求，或 null
- * @param context 当前执行的上下文（会话 id + 进度项 id 集合）
+ * @param context 当前执行的上下文（会话 id + 进度项 id 集合 + 就绪态）
  */
 export function resolveFocusAction(
   request: FocusRequest | null,
@@ -46,6 +56,9 @@ export function resolveFocusAction(
 ): FocusAction {
   if (request === null) {
     return 'ignore';
+  }
+  if (!context.ready) {
+    return 'wait';
   }
   if (request.sessionID !== null && request.sessionID !== context.sessionID) {
     return 'stale';

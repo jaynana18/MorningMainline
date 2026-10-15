@@ -10,18 +10,24 @@ import {
   COMMUTE_DEPART_TITLE,
   DEADLINE_MILESTONES,
   COMMUTE_LEAD_SECONDS,
+  DEFAULT_OVERDUE_POLICY,
+  OVERDUE_INTERVAL_RANGE,
   TASK_ADVANCE_TITLE,
   TASK_LEAD_SECONDS,
   activeTaskTitle,
   allReminders,
   deadlineMilestoneReminder,
   focusedTask,
+  normalizeOverduePolicy,
+  overdueFireOffsets,
   overdueReminder,
+  overdueRound,
   planReminders,
   speechText,
   spokenClock,
   taskAdvanceBody,
   taskReminder,
+  type OverduePolicy,
 } from '../src/core/reminders';
 
 /**
@@ -610,5 +616,164 @@ describe('reminders — 语音播报正文（speech / speechText）', () => {
     for (const reminder of reminders) {
       expect(reminder.speech.length).toBeGreaterThan(0);
     }
+  });
+});
+
+/**
+ * 超时提醒间隔策略（2026-10-15 用户需求：可配置 + 分两阶段）。
+ *
+ * 这个 describe 的重点不是「跑通」，而是**锁住两条不变量的等价性**：
+ * ① `overdueFireOffsets`（原生排期物化出的触发点）与 `overdueRound`（tick 里解析式反推的轮次）
+ *    必须同口径 —— 两者不一致会让同一轮被算两次或漏算，表现为「刚提醒过又来一条」或「一直不响」。
+ * ② **默认策略必须与改动前的旧行为逐字等价**（全程 2 分钟），否则老用户升级后节奏被悄悄改掉。
+ */
+describe('core/reminders — 超时提醒间隔策略 OverduePolicy', () => {
+  /** 用 `fireOffsets` 当真相，反向验证 `overdueRound` 在每一个触发点上都算出正确轮次。 */
+  function assertOffsetsMatchRounds(policy: OverduePolicy, limit: number): number[] {
+    const offsets = overdueFireOffsets(policy, limit);
+    expect(offsets).toHaveLength(limit);
+    for (let index = 0; index < offsets.length; index += 1) {
+      const seconds = offsets[index];
+      // 触发点当刻 → 正好是第 index 轮。
+      expect(overdueRound(seconds, policy)).toBe(index);
+      // 触发点前 1 秒 → 还是上一轮；第 0 轮之前则尚未触发（-1）。
+      expect(overdueRound(Math.max(0, seconds - 1), policy)).toBe(index - 1);
+    }
+    // 严格递增：一旦重复，说明两阶段算重叠了（同一秒会被排两条通知）。
+    for (let index = 1; index < offsets.length; index += 1) {
+      expect(offsets[index]).toBeGreaterThan(offsets[index - 1]);
+    }
+    return offsets;
+  }
+
+  it('🔴 默认策略与旧行为等价：全程 2 分钟，首轮在超时满 2 分钟', () => {
+    expect(DEFAULT_OVERDUE_POLICY).toEqual({
+      earlyInterval: 2,
+      switchAfter: 10,
+      lateInterval: 2,
+    });
+    const offsets = overdueFireOffsets(DEFAULT_OVERDUE_POLICY, 6);
+    expect(offsets).toEqual([120, 240, 360, 480, 600, 720]);
+    // 旧实现是 `floor(seconds / 120) - 1`，逐点比对不能有偏差。
+    for (const seconds of [0, 60, 119, 120, 239, 240, 599, 600, 601]) {
+      expect(overdueRound(seconds, DEFAULT_OVERDUE_POLICY)).toBe(
+        seconds < 120 ? -1 : Math.floor(seconds / 120) - 1,
+      );
+    }
+  });
+
+  it('用户给的例子：10 分钟以内每 2 分钟、超过后每 1 分钟', () => {
+    const policy: OverduePolicy = { earlyInterval: 2, switchAfter: 10, lateInterval: 1 };
+    // 阶段一 120/240/360/480（严格早于 600），阶段二从 600 起逐 60 秒。
+    expect(overdueFireOffsets(policy, 10)).toEqual([
+      120, 240, 360, 480, 600, 660, 720, 780, 840, 900,
+    ]);
+  });
+
+  it('🔴 两阶段无缝衔接：切换点处不留空档（不会 8 分钟响过要等到 12 分钟）', () => {
+    const policy: OverduePolicy = { earlyInterval: 4, switchAfter: 10, lateInterval: 1 };
+    const offsets = overdueFireOffsets(policy, 6);
+    // 阶段一 240/480，阶段二从 600 起 —— 480 → 600 只隔 2 分钟，不是「等一个 4 分钟」。
+    expect(offsets).toEqual([240, 480, 600, 660, 720, 780]);
+    expect(offsets[2] - offsets[1]).toBe(120);
+  });
+
+  it('阶段一为空（切换点比间隔还小）→ 第一条就是切换点本身', () => {
+    const policy: OverduePolicy = { earlyInterval: 5, switchAfter: 2, lateInterval: 1 };
+    const offsets = overdueFireOffsets(policy, 4);
+    expect(offsets).toEqual([120, 180, 240, 300]);
+    expect(overdueRound(119, policy)).toBe(-1);
+    expect(overdueRound(120, policy)).toBe(0);
+  });
+
+  it('切换点正好是阶段一的整倍数 → 切换点归阶段二，不重复计算', () => {
+    // early=2 分钟、switchAfter=6 分钟 → 切换点 360 秒 = 3 × 120，是整倍数（边界）。
+    // 最容易出的错是「阶段一算到 360、阶段二也从 360 起」→ 同一秒排两条通知。
+    const policy: OverduePolicy = { earlyInterval: 2, switchAfter: 6, lateInterval: 1 };
+    const offsets = overdueFireOffsets(policy, 5);
+    // 阶段一 120/240（360 不满足 `t < 360`），阶段二从 360 起逐 60 秒。
+    expect(offsets).toEqual([120, 240, 360, 420, 480]);
+    // 360 只出现一次，且它就是第 2 轮 —— 没有「算两遍」。
+    expect(offsets.filter((item) => item === 360)).toHaveLength(1);
+    expect(overdueRound(360, policy)).toBe(2);
+    expect(overdueRound(359, policy)).toBe(1);
+  });
+
+  it('🔴 overdueFireOffsets ↔ overdueRound 互证（多组策略含奇数分钟）', () => {
+    const policies: OverduePolicy[] = [
+      { earlyInterval: 1, switchAfter: 3, lateInterval: 1 },
+      { earlyInterval: 3, switchAfter: 10, lateInterval: 1 },
+      { earlyInterval: 7, switchAfter: 20, lateInterval: 2 },
+      { earlyInterval: 10, switchAfter: 10, lateInterval: 10 },
+      { earlyInterval: 9, switchAfter: 60, lateInterval: 4 },
+    ];
+    for (const policy of policies) {
+      assertOffsetsMatchRounds(policy, 8);
+    }
+  });
+
+  it('轮次只增不减：随时间推进不会回退到上一轮（否则去重键会重放旧提醒）', () => {
+    const policy: OverduePolicy = { earlyInterval: 2, switchAfter: 10, lateInterval: 1 };
+    let previous = -1;
+    for (let seconds = 0; seconds <= 30 * 60; seconds += 7) {
+      const round = overdueRound(seconds, policy);
+      expect(round).toBeGreaterThanOrEqual(previous);
+      previous = round;
+    }
+    // 走到 30 分钟，轮次确实在推进（不是一直 -1 的假绿）。
+    expect(previous).toBeGreaterThan(20);
+  });
+
+  it('normalizeOverduePolicy 容忍脏输入：缺键/越界/非数字一律回落合法值', () => {
+    // 缺键（旧数据）：与默认一致 —— 老用户升级后行为不变。
+    expect(normalizeOverduePolicy(undefined)).toEqual(DEFAULT_OVERDUE_POLICY);
+    expect(normalizeOverduePolicy(null)).toEqual(DEFAULT_OVERDUE_POLICY);
+    expect(normalizeOverduePolicy({})).toEqual(DEFAULT_OVERDUE_POLICY);
+
+    // 越界 → 夹到边界；非数字 → 该项回落默认。
+    expect(normalizeOverduePolicy({ earlyInterval: 0 })).toEqual({
+      earlyInterval: OVERDUE_INTERVAL_RANGE.min,
+      switchAfter: 10,
+      lateInterval: 2,
+    });
+    expect(normalizeOverduePolicy({ earlyInterval: 99 })).toEqual({
+      earlyInterval: OVERDUE_INTERVAL_RANGE.max,
+      switchAfter: 10,
+      lateInterval: 2,
+    });
+    expect(
+      normalizeOverduePolicy({
+        earlyInterval: Number.NaN,
+        switchAfter: 999,
+        lateInterval: Number.POSITIVE_INFINITY,
+      }),
+    ).toEqual({ earlyInterval: 2, switchAfter: 60, lateInterval: 2 });
+
+    // 归一化后的值一定落在可选范围内 —— 否则界面 select 会绑到「不在列表里的值」而显示空白。
+    const dirty = normalizeOverduePolicy({ earlyInterval: -5, switchAfter: 0, lateInterval: 1000 });
+    expect(dirty.earlyInterval).toBeGreaterThanOrEqual(OVERDUE_INTERVAL_RANGE.min);
+    expect(dirty.earlyInterval).toBeLessThanOrEqual(OVERDUE_INTERVAL_RANGE.max);
+    expect(dirty.lateInterval).toBeLessThanOrEqual(OVERDUE_INTERVAL_RANGE.max);
+    expect(dirty.switchAfter).toBeGreaterThanOrEqual(1);
+  });
+
+  it('🔴 奇数间隔下分钟数仍按 floor 报（ceil 会让播报比页面多 1 分钟）', () => {
+    // 间隔 3 分钟 → 第 1 轮在超时 180 秒。若用 ceil 报 3 分钟没错，
+    // 但 3 分钟的奇数网格上「2 分 59 秒」这类边界一撞就会露馅，故用 125 秒直接验 floor。
+    const progress = createProgress({
+      id: 'P-ODD',
+      step: createStep({ title: '写代码', duration: 10 * 60 }),
+      dueAt: new Date(2026, 7, 13, 11, 10, 0),
+      state: 'active',
+      startedAt: new Date(2026, 7, 13, 11, 0, 0),
+    });
+    const policy: OverduePolicy = { earlyInterval: 3, switchAfter: 10, lateInterval: 1 };
+    const round = overdueRound(125, policy);
+    expect(round).toBe(-1); // 未满 3 分钟，这一轮不该提醒
+    expect(overdueRound(180, policy)).toBe(0);
+    // 超时 125 秒即便被要求播报，正文也得是 2 分钟。
+    expect(
+      overdueReminder(progress, SESSION_ID, new Date(2026, 7, 13, 11, 12, 5), 0)!.speech,
+    ).toBe('“写代码”已经延误 2 分钟了，先把它收尾。');
   });
 });

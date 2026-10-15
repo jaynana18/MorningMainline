@@ -6,6 +6,7 @@ import { createMockBridge } from '../src/platform/mock';
 import { WebViewBridge, decodeParseResultWire } from '../src/platform/webview';
 import { isPageForeground } from '../src/platform/foreground';
 import { encodeSnapshot } from '../src/core/serialization';
+import { DEFAULT_OVERDUE_POLICY } from '../src/core/reminders';
 import { createSnapshot, createSession, createProgress, createStep } from '../src/core/types';
 
 describe('platform/bridge — 宿主探测', () => {
@@ -535,12 +536,18 @@ describe('platform — 跨设备设置里的播报开关（speechEnabled）', ()
       amapKey: '',
       travelMode: 'driving',
       speechEnabled: true,
+      overduePolicy: DEFAULT_OVERDUE_POLICY,
     });
   });
 
   it('浏览器宿主：写入 false 后读回仍是 false（关得住）', async () => {
     const bridge = createBrowserBridge();
-    await bridge.writeSettings({ amapKey: 'k', travelMode: 'walking', speechEnabled: false });
+    await bridge.writeSettings({
+      amapKey: 'k',
+      travelMode: 'walking',
+      speechEnabled: false,
+      overduePolicy: DEFAULT_OVERDUE_POLICY,
+    });
     const restored = await bridge.readSettings();
     expect(restored.speechEnabled).toBe(false);
     expect(restored.travelMode).toBe('walking');
@@ -587,11 +594,21 @@ describe('platform — 跨设备设置里的播报开关（speechEnabled）', ()
     };
     vi.stubGlobal('window', host);
 
-    await new WebViewBridge().writeSettings({ amapKey: '', travelMode: 'driving', speechEnabled: false });
+    await new WebViewBridge().writeSettings({
+      amapKey: '',
+      travelMode: 'driving',
+      speechEnabled: false,
+      overduePolicy: DEFAULT_OVERDUE_POLICY,
+    });
 
     const call = posted.find((item) => item.method === 'settings.write');
     expect(call).toBeDefined();
-    expect(call!.params).toEqual({ amapKey: '', travelMode: 'driving', speechEnabled: false });
+    expect(call!.params).toEqual({
+      amapKey: '',
+      travelMode: 'driving',
+      speechEnabled: false,
+      overduePolicy: DEFAULT_OVERDUE_POLICY,
+    });
   });
 
   it('WebView 宿主：settings.read 缺 speechEnabled 时兜成开（旧原生包不返回该字段）', async () => {
@@ -617,5 +634,41 @@ describe('platform — 跨设备设置里的播报开关（speechEnabled）', ()
     const restored = await new WebViewBridge().readSettings();
     expect(restored.speechEnabled).toBe(true);
     expect(restored.amapKey).toBe('old-build');
+    // 旧原生包同样没有 overduePolicy → 必须回落默认（全程 2 分钟），而不是 undefined。
+    // 若漏了兜底，`overdueRound` 会在 tick 里算 NaN 轮次 → 超时提醒**永远不触发**。
+    expect(restored.overduePolicy).toEqual(DEFAULT_OVERDUE_POLICY);
+  });
+
+  it('WebView 宿主：settings.read 的 overduePolicy 脏值被夹回合法范围', async () => {
+    const host = {
+      webkit: {
+        messageHandlers: {
+          mainline: {
+            postMessage: (message: { id: string }) => {
+              // 模拟「原生侧存了越界/非法值」：负数、超上限、非数字、缺字段混合。
+              (host as unknown as { __mainlineReply?: (r: unknown) => void }).__mainlineReply?.({
+                id: message.id,
+                ok: true,
+                result: {
+                  amapKey: 'k',
+                  travelMode: 'driving',
+                  speechEnabled: true,
+                  overduePolicy: { earlyInterval: 0, switchAfter: 999, lateInterval: 'x' },
+                },
+              });
+            },
+          },
+        },
+      },
+      __mainlineReply: undefined as unknown,
+    };
+    vi.stubGlobal('window', host);
+
+    const restored = await new WebViewBridge().readSettings();
+    expect(restored.overduePolicy).toEqual({
+      earlyInterval: 1, // 0 夹到下限
+      switchAfter: 60, // 999 夹到上限
+      lateInterval: 2, // 非数字 → 默认
+    });
   });
 });

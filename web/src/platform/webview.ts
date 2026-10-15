@@ -17,6 +17,9 @@
 import type { ParseResult, ParseSource, RoutineSession, RoutineSnapshot, RoutineStep } from '../core/types';
 import { createStep, makeParseResult, randomUUID } from '../core/types';
 import { decodeSnapshot, encodeSnapshot, refSecondsToMs } from '../core/serialization';
+// `overduePolicy` 读回来必须过 `normalizeOverduePolicy`：原生侧可能是**旧版本**（没有这个键），
+// 也可能是未来版本塞了脏值（负数/超范围/非数字）。不归一化会在 tick 里算出 NaN 轮次 → 永不提醒。
+import { normalizeOverduePolicy, type OverduePolicy } from '../core/reminders';
 import { createBrowserBridge } from './browser';
 import type {
   BridgeCapabilities,
@@ -277,6 +280,10 @@ export class WebViewBridge implements PlatformBridge {
           travelMode: typeof result.travelMode === 'string' ? result.travelMode : 'driving',
           // 原生侧同样用 `decodeIfPresent` 兜底；这里再兜一层，防旧原生包不返回该字段。
           speechEnabled: result.speechEnabled !== false,
+          // 旧原生包不返回该字段 → `normalize` 补成默认（全程 2 分钟）。
+          overduePolicy: normalizeOverduePolicy(
+            result.overduePolicy as Partial<OverduePolicy> | null | undefined,
+          ),
         };
       }
       throw new Error('settings.read 结果非法');

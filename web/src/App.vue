@@ -92,6 +92,11 @@ onMounted(async () => {
  * 通知点击的回跳由上面那条 watch 负责，与此互不干扰。
  */
 function resumeRunningSession(): void {
+  // ⚠️ 有待消费的通知回跳请求时**不抢**导航：那条 watch 会把用户送到会话页，
+  // 而它还要靠 SessionView 按 progressID 高亮具体那一行。这里再 push 一次虽然
+  // 目标相同（都是 /session），但会与回跳 watch 竞争同一次导航，且语义上「通知回跳」
+  // 优先级高于「冷启动兜底」——用户是带着明确意图点进来的。
+  if (reminders.focusRequest !== null) return;
   if (store.session?.state !== 'running') return;
   if (router.currentRoute.value.name !== 'home') return;
   void router.push('/session');
@@ -110,19 +115,29 @@ onUnmounted(() => {
  * 通知点击回跳的导航：全局唯一入口（通知可能在任意路由到达，所以放在 App 层）。
  *
  * - `stale`：用户点的是已结束/已被替换的会话的通知，消费掉即可，不拉回前台。
+ * - `wait`：**数据还没读出来**（冷启动时原生事件常早于 `store.init()` 到达）。
+ *   此时不能判 stale 把请求丢掉 —— 那正是「点通知停在首页」的根因。
+ *   保留请求，等 `store.ready` 变成 true 时本 watch 会自动重跑并完成导航。
  * - `navigate`：若当前不在会话页则跳过去；**不清** focusRequest，
  *   由 SessionView 挂载后消费（它要按 progressID 高亮并滚动到位）。
+ *
+ * ⚠️ watch 同时监听 `focusRequest` 与 `store.ready`：后者是 `wait` → 正常裁决的触发条件。
  */
 watch(
-  () => reminders.focusRequest,
-  (request) => {
+  [() => reminders.focusRequest, () => store.ready] as const,
+  ([request]) => {
     const action = resolveFocusAction(request, {
       sessionID: store.session?.id ?? null,
       progressIDs: store.session?.progress.map((item) => item.id) ?? [],
+      ready: store.ready,
     });
     if (action === 'stale') {
       // 那条会话已经结束/被替换，不能把它拉回前台；消费掉即可。
       reminders.clearFocusRequest();
+      return;
+    }
+    if (action === 'wait') {
+      // 数据未就绪：**保留**请求，等 store.ready 翻转后本 watch 会重跑。
       return;
     }
     if (action !== 'navigate') {
