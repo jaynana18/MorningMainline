@@ -123,6 +123,11 @@
       <circle cx="11.7" cy="12.2" r="1.7" />
       <path d="M4.3 5.5v3.1a2.4 2.4 0 0 0 2.4 2.4h4.1" />
     </template>
+    <!-- 铃铛语义更贴「提醒设置」，用 SF Symbols bell 的形状等价替代。 -->
+    <template v-else-if="name === 'bell'">
+      <path d="M8 2.2a3.9 3.9 0 0 1 3.9 3.9c0 3.2 1.2 4.1 1.2 4.1H2.9s1.2-.9 1.2-4.1A3.9 3.9 0 0 1 8 2.2z" />
+      <path d="M6.6 12.2a1.5 1.5 0 0 0 2.8 0" />
+    </template>
   </svg>
 </template>
 

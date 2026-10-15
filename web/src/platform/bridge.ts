@@ -76,10 +76,25 @@ export interface SharedSettings {
   amapKey: string;
   /** 出行方式：`driving` | `walking` | `transit`。 */
   travelMode: string;
+  /**
+   * App 内语音播报开关。**默认开**。
+   *
+   * 关掉只影响「念不念」，弹窗照常显示 —— 所以它是**独立于提醒通道**的一个偏好，
+   * 不是「静音模式」。用户想安静看屏幕却仍要视觉提醒时，关这个即可。
+   *
+   * ⚠️ 与系统「播报通知」（设置 → Siri 与搜索）无关：那条只在锁屏/熄屏生效，
+   * 本开关管的是 App 自己念的那一路（亮屏也响）。两者互不影响，用户可能同时开着。
+   */
+  speechEnabled: boolean;
 }
 
 /** 未配置时的空设置。浏览器宿主的回落值。 */
-export const EMPTY_SHARED_SETTINGS: SharedSettings = { amapKey: '', travelMode: 'driving' };
+export const EMPTY_SHARED_SETTINGS: SharedSettings = {
+  amapKey: '',
+  travelMode: 'driving',
+  // 默认开：用户装完就该听到播报，而不是先去设置里找开关。
+  speechEnabled: true,
+};
 
 /**
  * 平台桥接口（§4b.1，冻结）。

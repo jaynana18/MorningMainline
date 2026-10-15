@@ -64,7 +64,9 @@ struct MorningMainlineApp: App {
 
         /// 此时 WebHost 尚未 attach，Vue 页内提醒通道一定还不可用，因此必须保留系统横幅兜底。
         /// attach 后由 `WebHost.Coordinator` 接替，并仅在 Vue 明确 ready 后抑制横幅。
-        nonisolated func userNotificationCenter(
+        ///
+        /// `@MainActor` 的理由见下方 `didReceive` 的注释（同一套线程约束）。
+        @MainActor func userNotificationCenter(
             _ center: UNUserNotificationCenter,
             willPresent notification: UNNotification
         ) async -> UNNotificationPresentationOptions {
@@ -75,15 +77,23 @@ struct MorningMainlineApp: App {
         /// 等 `Coordinator.attach(to:)`（安装消费者时）当场交出补发（届时若页面未就绪会被入队，
         /// 由 `didFinish` flush —— 保证冷启动点击不丢）。attach 之后的点击由
         /// `WebHost.Coordinator.userNotificationCenter(_:didReceive:)` 直接 emit。
-        nonisolated func userNotificationCenter(
+        ///
+        /// 🔴 **必须是 `@MainActor`，不能是 `nonisolated`**（2026-10-15 修闪退）：
+        /// `nonisolated async` 的委托方法在 Swift 并发的协作线程池上恢复，而用户点通知时
+        /// UIKit 正做「快照 + 状态恢复归档」，`-[UIApplication
+        /// _updateStateRestorationArchiveForBackgroundEvent:...]` 断言**必须在主线程** → `SIGABRT`。
+        ///
+        /// 关键点：**在方法体里 `await MainActor.run { ... }` 是无效的** —— 断言发生在恢复点，
+        /// 也就是进入方法体之前。必须让方法整体隔离在主 actor 上。
+        ///
+        /// 只在**真机**复现：模拟器不做这套后台快照归档。
+        @MainActor func userNotificationCenter(
             _ center: UNUserNotificationCenter,
             didReceive response: UNNotificationResponse
         ) async {
-            await MainActor.run {
-                Logger(subsystem: "com.jaynana.MorningMainline", category: "WebLifecycle")
-                    .notice("Notification opened through launch delegate")
-                WebHost.NotificationInbox.store(response: response)
-            }
+            Logger(subsystem: "com.jaynana.MorningMainline", category: "WebLifecycle")
+                .notice("Notification opened through launch delegate")
+            WebHost.NotificationInbox.store(response: response)
         }
     }
 

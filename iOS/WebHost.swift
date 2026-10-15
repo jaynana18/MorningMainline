@@ -432,13 +432,21 @@ extension WebHost {
             case "settings.read":
                 // 高德 Key 存 App Group 而非快照里 —— 快照会多处落盘，凭据不该跟着业务数据飘。
                 let settings = store.settings
-                reply(id: id, result: ["amapKey": settings.amapKey, "travelMode": settings.travelMode])
+                reply(id: id, result: [
+                    "amapKey": settings.amapKey,
+                    "travelMode": settings.travelMode,
+                    "speechEnabled": settings.speechEnabled,
+                ])
 
             case "settings.write":
                 // 这一步是手表拿到 Key 的唯一路径：写 App Group + 经 WCSession 广播。
                 store.setAmapKey(params["amapKey"] as? String ?? "")
                 if let raw = params["travelMode"] as? String, let mode = TravelMode(rawValue: raw) {
                     store.setTravelMode(mode)
+                }
+                // 只有显式传了布尔值才改动，避免旧的 JS 包不带该字段时把开关误关掉。
+                if let speech = params["speechEnabled"] as? Bool {
+                    store.setSpeechEnabled(speech)
                 }
                 reply(id: id)
 
@@ -471,7 +479,12 @@ extension WebHost {
                 //
                 // 播报是「发出即完成」，不等待念完再回执：念一句话要好几秒，
                 // 让 JS 等回执会拖住提醒引擎的 tick。
-                SpeechAnnouncer.shared.speak(params["text"] as? String ?? "")
+                //
+                // 用户关掉开关时不念。JS 侧 `present()` 已经拦了一道，这里是**第二道**：
+                // 开关存的是原生 App Group，原生读到的才是权威值，不依赖 JS 是否同步到位。
+                if store.settings.speechEnabled {
+                    SpeechAnnouncer.shared.speak(params["text"] as? String ?? "")
+                }
                 reply(id: id)
 
             case "parse.withModel":
@@ -832,29 +845,43 @@ extension WebHost {
         ///
         /// 冷启动到 attach 之间由 AppDelegate 担任 delegate，并始终放行横幅；attach 之后由本
         /// Coordinator 接替，再依据页内提醒通道的 ready 状态动态裁决。
-        nonisolated func userNotificationCenter(
+        ///
+        /// `@MainActor` 与下面 `didReceive` 同因：`nonisolated async` 的恢复点不在主线程，
+        /// 而这条路径同样可能被 UIKit 的快照 / 状态恢复归档触发。顺带省掉了原来的
+        /// `await MainActor.run` 往返。
+        @MainActor func userNotificationCenter(
             _ center: UNUserNotificationCenter,
             willPresent notification: UNNotification
         ) async -> UNNotificationPresentationOptions {
-            let pageCanPresent = await MainActor.run { self.isForegroundReminderReady }
-            return pageCanPresent ? [] : [.banner, .sound]
+            isForegroundReminderReady ? [] : [.banner, .sound]
         }
 
         /// attach 之后到达的通知点击：直接 emit 给 JS（此时 delegate 已由本 Coordinator 担任）。
         ///
         /// 载荷抽取与冷启动窗口共用 `NotificationInbox.notificationOpenedPayload(from:)`，
         /// 保证两条路径产出的 `notification.opened` 载荷**逐字一致**，不留两份拷贝。
-        nonisolated func userNotificationCenter(
+        ///
+        /// 🔴 **必须 `@MainActor`，不能写 `nonisolated`**（2026-10-15 修闪退）：
+        /// `nonisolated` 的 `async` 委托方法，其**恢复点**会落在 Swift 并发的协作线程池
+        /// （崩溃日志里是 `com.apple.root.user-initiated-qos.cooperative`）。而用户点通知时
+        /// UIKit 正走「快照 + 状态恢复归档」路径，`-[UIApplication
+        /// _updateStateRestorationArchiveForBackgroundEvent:...]` 断言**必须在主线程**，
+        /// 于是必然 `SIGABRT`。
+        ///
+        /// 这类崩溃的迷惑性在于：**方法体里写 `await MainActor.run { ... }` 并不能解决**——
+        /// 断言发生在恢复点本身（进入方法体之前），而不是方法体里做了什么。只有让整个方法
+        /// 隔离在主 actor 上，恢复点才会回到主线程。
+        ///
+        /// 症状只出现在**真机**：模拟器不会做这套后台快照归档，所以模拟器点击一切正常。
+        @MainActor func userNotificationCenter(
             _ center: UNUserNotificationCenter,
             didReceive response: UNNotificationResponse
         ) async {
             guard let payload = NotificationInbox.notificationOpenedPayload(from: response) else {
                 return
             }
-            await MainActor.run {
-                Self.lifecycleLog.notice("Notification opened after attach; page ready: \(self.isPageReady)")
-                self.emit(event: "notification.opened", payload: payload)
-            }
+            Self.lifecycleLog.notice("Notification opened after attach; page ready: \(self.isPageReady)")
+            self.emit(event: "notification.opened", payload: payload)
         }
 
         /// 在 Vue 启动前捕获脚本错误，包含启动失败与未处理的 Promise 异常。

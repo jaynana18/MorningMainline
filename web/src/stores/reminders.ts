@@ -116,10 +116,16 @@ export const useRemindersStore = defineStore('reminders', () => {
    *
    * ⚠️ 不 await：播报是副作用，念多久都不该拖住 tick（`tick` 是 1Hz 驱动的
    * 同步决策点）。桥自身已保证失败静默（§4b.1）。
+   *
+   * 播报开关于首次开关时读 `routineStore.settings.speechEnabled`（默认开）。
+   * ⚠️ 开关只影响「听」——弹窗照常显示。用户关掉的是声音，不是提醒本身，
+   * 所以绝不能 `return` 在 `active.value =` 之前（否则连弹窗都没了）。
+   * 原生 `speech.speak` 里还有**第二道**同名拦截（开关存 App Group，
+   * 以原生读到的为准），这里只是让 JS 少发一次不必要的桥调用。
    */
   function present(reminder: ReminderMessage): void {
     active.value = reminder;
-    if (bridge.capabilities.speech) {
+    if (bridge.capabilities.speech && routineStore.settings.speechEnabled) {
       void bridge.speak(speechText(reminder, new Date()));
     }
   }

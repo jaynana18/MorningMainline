@@ -535,10 +535,10 @@ describe('stores/reminders — 超时每 2 分钟循环提醒（可见 → 页�
     vi.setSystemTime(new Date(2026, 7, 13, 11, 0, 0));
     await reminders.start();
 
-    reminders.tick(new Date(2026, 7, 13, 11, 12, 5)); // 超时 125 秒 → ceil = 3 分钟
+    reminders.tick(new Date(2026, 7, 13, 11, 12, 5)); // 超时 125 秒 → floor = 2 分钟
     expect(reminders.active?.key).toBe('overdue:P-OVD:0');
     expect(reminders.active?.title).toBe('不跑偏 · 超时了');
-    expect(reminders.active?.body).toBe('“写代码”已经超了 3 分钟，先把它收尾。');
+    expect(reminders.active?.body).toBe('“写代码”已经超了 2 分钟，先把它收尾。');
     expect(reminders.active?.level).toBe('timeSensitive');
     expect(reminders.active?.sound).toBe('overdue');
   });
@@ -572,9 +572,9 @@ describe('stores/reminders — 超时每 2 分钟循环提醒（可见 → 页�
     expect(reminders.active?.body).toBe('“写代码”已经超了 4 分钟，先把它收尾。');
     reminders.dismiss();
 
-    reminders.tick(new Date(2026, 7, 13, 11, 16, 30)); // 超时 6.5 分钟 → 第 2 轮
+    reminders.tick(new Date(2026, 7, 13, 11, 16, 30)); // 超时 390 秒 = 6.5 分钟 → floor = 6 分钟
     expect(reminders.active?.key).toBe('overdue:P-OVD:2');
-    expect(reminders.active?.body).toBe('“写代码”已经超了 7 分钟，先把它收尾。');
+    expect(reminders.active?.body).toBe('“写代码”已经超了 6 分钟，先把它收尾。');
   });
 
   it('弹窗约几秒后自动关闭（不用用户手动点）', async () => {
@@ -833,5 +833,66 @@ describe('stores/reminders — 语音播报', () => {
     expect(bridge.speakCalls[1]).toBe(
       '现在是11 点 14 分。“写代码”已经延误 4 分钟了，先把它收尾。',
     );
+  });
+
+  it('开关默认开：未做任何设置时就该播报（装完即用，不用先去设置里找）', async () => {
+    const bridge = makeBridge({ backgroundNotification: false });
+    const { routine, reminders } = setup(bridge);
+
+    expect(routine.settings.speechEnabled).toBe(true);
+
+    vi.setSystemTime(new Date(2026, 7, 13, 11, 59, 0));
+    await reminders.start();
+
+    expect(bridge.speakCalls).toHaveLength(1);
+  });
+
+  it('🔴 关掉开关后只弹窗不播报 —— 关的是声音，不是提醒本身', async () => {
+    const bridge = makeBridge({ backgroundNotification: false });
+    const { routine, reminders } = setup(bridge);
+
+    await routine.saveSettings({ speechEnabled: false });
+    expect(routine.settings.speechEnabled).toBe(false);
+
+    vi.setSystemTime(new Date(2026, 7, 13, 11, 59, 0));
+    await reminders.start();
+
+    // 弹窗照常出现（`active.value = reminder` 在开关判断之前）——
+    // 若把 `return` 写在赋值之前，用户关掉声音就连提醒都收不到了。
+    expect(reminders.active?.key).toBe(`deadline:${SID}:-1`);
+    expect(bridge.speakCalls).toHaveLength(0);
+  });
+
+  it('关掉开关后，队列前进仍不播报（开关是全程生效，不是只拦第一条）', async () => {
+    const bridge = makeBridge({ backgroundNotification: false });
+    const { routine, reminders } = setup(bridge);
+
+    await routine.saveSettings({ speechEnabled: false });
+
+    // 11:50 启动 → -10 显示（不播），12:00 → -1 与 0 进队列。
+    vi.setSystemTime(new Date(2026, 7, 13, 11, 50, 0));
+    await reminders.start();
+    expect(reminders.active?.key).toBe(`deadline:${SID}:-10`);
+
+    vi.setSystemTime(new Date(2026, 7, 13, 12, 0, 0));
+    reminders.tick(new Date(2026, 7, 13, 12, 0, 0));
+    reminders.dismiss();
+
+    // 队列前进走的是 `present()`，同样要过开关。
+    expect(reminders.active?.key).toBe(`deadline:${SID}:-1`);
+    expect(bridge.speakCalls).toHaveLength(0);
+  });
+
+  it('开关重新打开后恢复播报（不是一次性失效）', async () => {
+    const bridge = makeBridge({ backgroundNotification: false });
+    const { routine, reminders } = setup(bridge);
+
+    await routine.saveSettings({ speechEnabled: false });
+    await routine.saveSettings({ speechEnabled: true });
+
+    vi.setSystemTime(new Date(2026, 7, 13, 11, 59, 0));
+    await reminders.start();
+
+    expect(bridge.speakCalls).toHaveLength(1);
   });
 });

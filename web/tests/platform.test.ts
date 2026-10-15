@@ -527,3 +527,95 @@ describe('platform — 语音播报（speak）', () => {
     expect(posted).toHaveLength(0);
   });
 });
+
+describe('platform — 跨设备设置里的播报开关（speechEnabled）', () => {
+  it('浏览器宿主：无存量设置时默认开（新装用户不该先去设置里找开关）', async () => {
+    const bridge = createBrowserBridge();
+    await expect(bridge.readSettings()).resolves.toEqual({
+      amapKey: '',
+      travelMode: 'driving',
+      speechEnabled: true,
+    });
+  });
+
+  it('浏览器宿主：写入 false 后读回仍是 false（关得住）', async () => {
+    const bridge = createBrowserBridge();
+    await bridge.writeSettings({ amapKey: 'k', travelMode: 'walking', speechEnabled: false });
+    const restored = await bridge.readSettings();
+    expect(restored.speechEnabled).toBe(false);
+    expect(restored.travelMode).toBe('walking');
+    // 高德 Key 必须原样带过去 —— 新增字段不能把同一个对象里别的值挤掉。
+    expect(restored.amapKey).toBe('k');
+  });
+
+  it('浏览器宿主：旧数据缺 speechEnabled 键 → 按开处理（不能当成用户主动关闭）', async () => {
+    // 直接往存储里塞一份「上个版本写下」的 JSON：没有 speechEnabled，
+    // 这比走 writeSettings 更真 —— writeSettings 的入参是完整 SharedSettings，
+    // 构造不出「缺键」的形态。
+    const bridge = createBrowserBridge();
+    const internals = bridge as unknown as {
+      store: { set(key: string, value: unknown): Promise<void> };
+    };
+    await internals.store.set(
+      'morning-mainline.settings.v1',
+      JSON.stringify({ amapKey: 'legacy', travelMode: 'transit' }),
+    );
+
+    const restored = await bridge.readSettings();
+    // `!== false` 而非 `=== true`：缺键走 true。用 `=== true` 会让老用户静默变哑巴。
+    expect(restored.speechEnabled).toBe(true);
+    expect(restored.amapKey).toBe('legacy');
+  });
+
+  it('WebView 宿主：settings.write 把 speechEnabled 一并发出（原生才是权威存储）', async () => {
+    const posted: { id: string; method: string; params: Record<string, unknown> }[] = [];
+    const host = {
+      webkit: {
+        messageHandlers: {
+          mainline: {
+            postMessage: (message: { id: string; method: string; params: Record<string, unknown> }) => {
+              posted.push(message);
+              (host as unknown as { __mainlineReply?: (r: unknown) => void }).__mainlineReply?.({
+                id: message.id,
+                ok: true,
+              });
+            },
+          },
+        },
+      },
+      __mainlineReply: undefined as unknown,
+    };
+    vi.stubGlobal('window', host);
+
+    await new WebViewBridge().writeSettings({ amapKey: '', travelMode: 'driving', speechEnabled: false });
+
+    const call = posted.find((item) => item.method === 'settings.write');
+    expect(call).toBeDefined();
+    expect(call!.params).toEqual({ amapKey: '', travelMode: 'driving', speechEnabled: false });
+  });
+
+  it('WebView 宿主：settings.read 缺 speechEnabled 时兜成开（旧原生包不返回该字段）', async () => {
+    const host = {
+      webkit: {
+        messageHandlers: {
+          mainline: {
+            postMessage: (message: { id: string }) => {
+              // 模拟「旧原生包」：只回 amapKey / travelMode，没有 speechEnabled。
+              (host as unknown as { __mainlineReply?: (r: unknown) => void }).__mainlineReply?.({
+                id: message.id,
+                ok: true,
+                result: { amapKey: 'old-build', travelMode: 'driving' },
+              });
+            },
+          },
+        },
+      },
+      __mainlineReply: undefined as unknown,
+    };
+    vi.stubGlobal('window', host);
+
+    const restored = await new WebViewBridge().readSettings();
+    expect(restored.speechEnabled).toBe(true);
+    expect(restored.amapKey).toBe('old-build');
+  });
+});

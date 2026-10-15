@@ -94,6 +94,14 @@ final class RoutineStore: ObservableObject {
         connectivity.publish(next)
     }
 
+    /// 开关 App 内语音播报。落本机 App Group 并广播，两端保持一致。
+    func setSpeechEnabled(_ enabled: Bool) {
+        var next = SharedSettingsStore.updateSpeechEnabled(enabled)
+        next.originID = deviceID
+        settings = next
+        connectivity.publish(next)
+    }
+
     /// 采纳对端同步来的设置。丢弃自己的回声，否则两端会互相覆盖。
     private func adoptSettings(_ incoming: MainlineSettings) {
         guard SharedSettingsStore.adopt(incoming, localDeviceID: deviceID) else { return }

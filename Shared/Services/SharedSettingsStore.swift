@@ -13,14 +13,48 @@ struct MainlineSettings: Codable, Hashable, Sendable {
     var amapKey: String
     /// 上次使用的出行方式。手表与手机保持一致，省得每端各选一次。
     var travelMode: String
+    /// App 内语音播报开关，默认开。关掉只影响「念不念」，弹窗照常显示。
+    ///
+    /// ⚠️ 与系统「播报通知」（设置 → Siri 与搜索）无关：那条只在锁屏/熄屏生效，
+    /// 本开关管的只是 App 自己念的那一路（亮屏也响）。两者互不影响。
+    var speechEnabled: Bool
     /// 写入这份设置的设备 id。用于识别「自己的回声」——若不做这一步，
     /// 两端会各自把对方的旧值再发回去，形成来回覆盖。
     var originID: UUID?
 
-    init(amapKey: String = "", travelMode: String = TravelMode.driving.rawValue, originID: UUID? = nil) {
+    init(
+        amapKey: String = "",
+        travelMode: String = TravelMode.driving.rawValue,
+        speechEnabled: Bool = true,
+        originID: UUID? = nil
+    ) {
         self.amapKey = amapKey
         self.travelMode = travelMode
+        self.speechEnabled = speechEnabled
         self.originID = originID
+    }
+
+    /// 🔴 手写解码，**必须**如此：`speechEnabled` 是后加的字段，而 App Group / WCSession
+    /// 里可能还躺着旧版本写下的数据。`JSONDecoder` 对「非可选字段缺失」会**整体抛错**，
+    /// 那样 `SharedSettingsStore.current` 的 `try?` 会走到 `catch` 分支、返回一份全新的
+    /// 默认设置 —— 用户填好的高德 Key 会**静默丢失**，且只表现为「怎么又要重填一次」。
+    ///
+    /// 用 `decodeIfPresent` 逐字段兜底：缺失的键取默认值，其余字段照常还原。
+    /// 对端是旧版本 App 时（WCSession 推来的设置同样没有新键）也靠这里保住兼容。
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        amapKey = try container.decodeIfPresent(String.self, forKey: .amapKey) ?? ""
+        travelMode = try container.decodeIfPresent(String.self, forKey: .travelMode)
+            ?? TravelMode.driving.rawValue
+        // 旧数据没有这个键 → 取 true（默认开），而不是 false。
+        speechEnabled = try container.decodeIfPresent(Bool.self, forKey: .speechEnabled) ?? true
+        originID = try container.decodeIfPresent(UUID.self, forKey: .originID)
+    }
+
+    /// 显式声明，与手写的 `init(from:)` 配套。键名即落盘 JSON 的键名，
+    /// **改动会破坏已存数据的兼容性**，不要重命名。
+    private enum CodingKeys: String, CodingKey {
+        case amapKey, travelMode, speechEnabled, originID
     }
 
     var mode: TravelMode { TravelMode(rawValue: travelMode) ?? .driving }
@@ -62,6 +96,15 @@ enum SharedSettingsStore {
     static func updateTravelMode(_ mode: TravelMode) -> MainlineSettings {
         var settings = current
         settings.travelMode = mode.rawValue
+        current = settings
+        return settings
+    }
+
+    /// 只改播报开关，保留其余字段（尤其是高德 Key）。
+    @discardableResult
+    static func updateSpeechEnabled(_ enabled: Bool) -> MainlineSettings {
+        var settings = current
+        settings.speechEnabled = enabled
         current = settings
         return settings
     }

@@ -13,6 +13,14 @@
         </div>
       </section>
       <section class="mm-section">
+        <div class="mm-section-heading"><h3>提醒设置</h3><SessionIcon name="bell" :size="18" /></div>
+        <label class="mm-toggle profile-toggle">
+          <input v-model="speechEnabled" type="checkbox" data-testid="speech-toggle" />
+          应用内语音播报
+        </label>
+        <p class="mm-hint profile-data-note">提醒弹出时用语音念出内容，亮屏使用中同样出声。关闭后只保留弹窗，不再出声。</p>
+      </section>
+      <section class="mm-section">
         <div class="mm-section-heading"><h3>通勤设置</h3><SessionIcon name="route" :size="18" /></div>
         <label>高德 Web 服务 Key
           <input v-model="amapKey" type="password" autocomplete="off" class="mm-input" placeholder="粘贴高德开放平台的 Web 服务 Key" />
@@ -40,12 +48,48 @@
   </div>
 </template>
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { account, accountRequest } from '../platform/account';
 import SessionIcon from './session/SessionIcon.vue';
 import { useRoutineStore } from '../stores/routine';
 const store = useRoutineStore();
 const busy = ref(false), error = ref('');
+
+/**
+ * 三个设置项从 store 读，**用 computed 的 getter/setter 而不是本地 ref**：
+ * 设置的真实来源是 `routineStore.settings`（它由桥从 App Group / localStorage 读出），
+ * 用本地 ref 会出现「页面显示旧值、实际已同步新值」的分叉。
+ *
+ * setter 里 `void` 掉 promise：保存是后台动作，`saveSettings` 已保证失败静默
+ * （桥内部 catch + 回落），不该让输入框卡住或弹错。
+ */
+const amapKey = computed({
+  get: () => store.settings.amapKey,
+  set: (value: string) => void store.saveSettings({ amapKey: value }),
+});
+
+const travelMode = computed({
+  get: () => store.settings.travelMode,
+  set: (value: string) => void store.saveSettings({ travelMode: value }),
+});
+
+const speechEnabled = computed({
+  get: () => store.settings.speechEnabled,
+  set: (value: boolean) => void store.saveSettings({ speechEnabled: value }),
+});
+
+// 首次进入本页时补一次读取：设置由 `performInit` 载入，但用户可能在 init 完成前
+// 就切到本页（路由不 gate 在 ready 上），那样输入框会短暂显示空 key。
+watch(
+  () => store.ready,
+  (ready) => {
+    if (ready) {
+      void store.ensureReady();
+    }
+  },
+  { immediate: true },
+);
+
 async function logout(): Promise<void> {
   busy.value = true;
   try {
@@ -72,4 +116,6 @@ async function logout(): Promise<void> {
 .profile-sync--warning { color: #c39451; }
 .profile-data-note { margin: 16px 0 0; }
 .profile-logout { width: 100%; }
+/* 开关行：标签是整行可点的，行高给足以便触摸。 */
+.profile-toggle { display: flex; align-items: center; gap: 10px; margin: 4px 0; padding: 10px 0; font-size: 14px; color: var(--mm-ink); cursor: pointer; }
 </style>

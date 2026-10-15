@@ -509,7 +509,8 @@ describe('reminders — 语音播报正文（speech / speechText）', () => {
   });
 
   it('⚠️ 时刻取自调用方传入的 now，而非 reminder.fireAt', () => {
-    // 起点 11:00、时长 10 分钟 → 11:10 起超时；11:12:05 时超时 125 秒 → ceil = 3 分钟。
+    // 起点 11:00、时长 10 分钟 → 11:10 起超时；11:12:05 时超时 125 秒 → floor = 2 分钟
+    // （口径同界面 `TimelineCard.overdueText`，见 `overdueReminder` 的注释）。
     const progress = createProgress({
       id: 'P-OVD-SP',
       step: createStep({ title: '写代码', duration: 10 * 60 }),
@@ -521,11 +522,13 @@ describe('reminders — 语音播报正文（speech / speechText）', () => {
 
     // fireAt 是「构建这条提醒的时刻」；播报时若已过两分钟，念出的应是 11:14 而不是 11:12。
     // 这正是超时循环提醒的真实场景（同一条 reminder 会被反复播报）。
+    // 注意：`speech` 里的分钟数在**构造时**就固化了（它描述的是那条提醒的内容），
+    // 随 `now` 变化的只有前面的时刻前缀 —— 两条断言的正文因此相同。
     expect(speechText(reminder, new Date(2026, 7, 13, 11, 12, 5))).toBe(
-      '现在是11 点 12 分。“写代码”已经延误 3 分钟了，先把它收尾。',
+      '现在是11 点 12 分。“写代码”已经延误 2 分钟了，先把它收尾。',
     );
     expect(speechText(reminder, new Date(2026, 7, 13, 11, 14, 0))).toBe(
-      '现在是11 点 14 分。“写代码”已经延误 3 分钟了，先把它收尾。',
+      '现在是11 点 14 分。“写代码”已经延误 2 分钟了，先把它收尾。',
     );
   });
 
@@ -539,11 +542,15 @@ describe('reminders — 语音播报正文（speech / speechText）', () => {
     });
     expect(
       overdueReminder(progress, SESSION_ID, new Date(2026, 7, 13, 11, 12, 5), 0)!.speech,
-    ).toBe('“写代码”已经延误 3 分钟了，先把它收尾。');
+    ).toBe('“写代码”已经延误 2 分钟了，先把它收尾。');
     // 满 4 分钟那一轮 → 念 4 分钟。
     expect(
       overdueReminder(progress, SESSION_ID, new Date(2026, 7, 13, 11, 14, 0), 1)!.speech,
     ).toBe('“写代码”已经延误 4 分钟了，先把它收尾。');
+    // ⚠️ 边界：2 分 59 秒仍算 2 分钟（floor），不能进位成 3 —— 否则又会和页面差一分钟。
+    expect(
+      overdueReminder(progress, SESSION_ID, new Date(2026, 7, 13, 11, 12, 59), 0)!.speech,
+    ).toBe('“写代码”已经延误 2 分钟了，先把它收尾。');
   });
 
   it('播报正文不含给眼睛看的前缀 / emoji（念出来是噪音）', () => {

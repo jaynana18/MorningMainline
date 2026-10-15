@@ -406,7 +406,7 @@ export function overdueSecondsOf(progress: StepProgress, now: Date): number {
  *
  * `round` 是「第几轮」：0 = 超时满 2 分钟那一次，1 = 满 4 分钟，依此类推。
  * 它只进 `key`（让每一轮都是独立的一条，不被一次性去重吃掉），
- * 文案里用的是**实际超时分钟数**（向上取整，至少 1）。
+ * 文案里用的是**实际超时分钟数**（向下取整，至少 1，口径见下方注释）。
  */
 export function overdueReminder(
   progress: StepProgress,
@@ -418,7 +418,11 @@ export function overdueReminder(
   if (seconds <= 0 || round < 0) {
     return null;
   }
-  const minutes = Math.max(1, Math.ceil(seconds / 60));
+  // ⚠️ `floor` 而非 `ceil`（2026-10-15 修「播报比页面多 1 分钟」）：
+  // 超时分钟数的**唯一权威口径**是界面 `TimelineCard.overdueText` 的 `floor`。
+  // 用 `ceil` 会让 2 分 5 秒显示成「已超 3 分钟」，而页面写「已超 2′」——
+  // 用户看到弹窗和念出来的数字对不上。三者（页面、本函数、Swift 排期）必须同口径。
+  const minutes = Math.max(1, Math.floor(seconds / 60));
   return {
     key: `overdue:${progress.id}:${round}`,
     title: OVERDUE_TITLE,

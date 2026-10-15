@@ -275,6 +275,8 @@ export class WebViewBridge implements PlatformBridge {
         return {
           amapKey: typeof result.amapKey === 'string' ? result.amapKey : '',
           travelMode: typeof result.travelMode === 'string' ? result.travelMode : 'driving',
+          // 原生侧同样用 `decodeIfPresent` 兜底；这里再兜一层，防旧原生包不返回该字段。
+          speechEnabled: result.speechEnabled !== false,
         };
       }
       throw new Error('settings.read 结果非法');

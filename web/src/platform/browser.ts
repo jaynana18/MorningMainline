@@ -208,6 +208,9 @@ export class BrowserBridge implements PlatformBridge {
       return {
         amapKey: typeof parsed.amapKey === 'string' ? parsed.amapKey : '',
         travelMode: typeof parsed.travelMode === 'string' ? parsed.travelMode : 'driving',
+        // 字段缺失（旧版本写下的数据）时回落默认开，而不是当成 false ——
+        // `boolean` 用 `!== false` 而不是 `=== true`，正是为了这一步。
+        speechEnabled: parsed.speechEnabled !== false,
       };
     } catch {
       return { ...EMPTY_SHARED_SETTINGS };
