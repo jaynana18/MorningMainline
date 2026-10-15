@@ -201,7 +201,7 @@
               :class="blockClasses(item)"
               :style="{ height: `${itemHeight(item)}px`, '--capsule-color': capsuleColor(item) }"
               :data-testid="`timeline-row-${item.id}`"
-              @click="selectedID = item.id"
+              @click="selectedID = selectedID === item.id ? null : item.id"
             >
               <div class="mm-time-capsule" role="progressbar" :aria-label="`${item.step.title}时间进度`" :aria-valuenow="Math.round(capsuleProgress(item))" aria-valuemin="0" aria-valuemax="100">
                 <div class="mm-time-capsule__fill" :style="{ height: `${capsuleProgress(item)}%` }"></div>
@@ -582,6 +582,14 @@ watch(() => sortableIDs.value.join(','), (next) => {
 });
 watch(() => props.focusedProgressId, (id) => {
   if (!id || typeof document === 'undefined') return;
+  // 🔴 **展开该任务的详情**（2026-10-15 用户要求「点通知应自动进入该任务详情界面」）。
+  // `selectedID` 就是详情面板的唯一开关 —— 模板里 `v-if="selectedID === item.id"`
+  // 控制着 `step.prompt`（任务说明）。原来只做高亮 + 滚动，用户点到通知后看到的是
+  // 一条被圈出来的标题，仍然得自己再点一下才能看到「这件事要做什么」。
+  //
+  // 刻意**不**跟随 4 秒高亮一起收回：用户是带着「看这件事」的意图点进来的，
+  // 读到一半自动折叠只会让人再点一次。要收起就点这张卡（再点一次即折叠）或点别的卡。
+  selectedID.value = id;
   void nextTick(() => document.querySelector(`[data-testid="timeline-row-${id}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
 }, { immediate: true });
 // 静默推进：到点自动完成上一项、切到下一项（只在可见的静默模式下生效）。

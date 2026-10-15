@@ -95,7 +95,9 @@ const lastPresentedCompletionID = ref<string | null>(null);
 
 /**
  * 通知回跳命中高亮：命中的 progress id（4 秒后自动清空）。
- * 由 SessionView 消费 reminders.focusRequest 后置入，传给 TimelineCard 高亮并滚动。
+ * 由 SessionView 消费 reminders.focusRequest 后置入，传给 TimelineCard
+ * **展开该任务的详情面板**（`step.prompt`）并滚动到屏幕中间。
+ * 详情面板的展开不随这 4 秒回落 —— 用户是带着「看这件事」的意图点进来的。
  */
 const focusedProgressID = ref<string | null>(null);
 let highlightTimer: ReturnType<typeof setTimeout> | null = null;
