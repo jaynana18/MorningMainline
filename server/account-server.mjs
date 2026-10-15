@@ -13,6 +13,7 @@ db.exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;
 CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, salt TEXT NOT NULL, password TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), expires INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS snapshots(owner_id TEXT PRIMARY KEY REFERENCES users(id), scope TEXT NOT NULL DEFAULT 'personal', revision INTEGER NOT NULL, data TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS preferences(owner_id TEXT PRIMARY KEY REFERENCES users(id), updated_at INTEGER NOT NULL, data TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS parse_cache(owner_id TEXT NOT NULL REFERENCES users(id), input_hash TEXT NOT NULL, version TEXT NOT NULL, data TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY(owner_id,input_hash,version));`);
 const secure = process.env.COOKIE_SECURE === 'true';
 const origins = new Set((process.env.ACCOUNT_ALLOWED_ORIGINS || 'http://localhost:5174,http://127.0.0.1:5174,https://47.104.95.146').split(','));
@@ -60,6 +61,31 @@ function validSnapshot(snapshot) {
       && Array.isArray(t.steps) && t.steps.every(s => typeof s.id === 'string' && typeof s.title === 'string' && Number.isFinite(s.duration) && s.duration >= 0))
     && (snapshot.activeSession === null || (snapshot.activeSession && typeof snapshot.activeSession.id === 'string' && Array.isArray(snapshot.activeSession.progress)))
     && Number.isFinite(snapshot.updatedAt) && typeof snapshot.originID === 'string';
+}
+/**
+ * 用户偏好（跨设备「用户习惯」）。只收**已知字段**，拒绝任何越界值。
+ *
+ * 存的是「用户自定义行为」三项：出行方式、语音播报、超时提醒间隔。
+ * ⚠️ **不含高德 Key** —— 那是开发者配置（服务端 / 构建期 env 注入），
+ * 不是用户数据，不该跟着账号在设备间漂。
+ *
+ * 校验刻意严格到「一个不对就整单拒绝」：偏好会直接驱动提醒节奏与播报行为，
+ * 半截数据比没数据更难查（例如 `lateInterval: 0` 会让提醒每 0 分钟触发一次）。
+ */
+function validPreferences(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const { travelMode, speechEnabled, overduePolicy } = value;
+  if (travelMode !== undefined && !['driving', 'walking', 'transit'].includes(travelMode)) return false;
+  if (speechEnabled !== undefined && typeof speechEnabled !== 'boolean') return false;
+  if (overduePolicy !== undefined) {
+    if (!overduePolicy || typeof overduePolicy !== 'object' || Array.isArray(overduePolicy)) return false;
+    const inRange = (v, min, max) => Number.isInteger(v) && v >= min && v <= max;
+    // 区间与 web/src/core/reminders.ts 的 OVERDUE_INTERVAL_RANGE / OVERDUE_SWITCH_RANGE 一致。
+    if (!inRange(overduePolicy.earlyInterval, 1, 10)) return false;
+    if (!inRange(overduePolicy.switchAfter, 1, 60)) return false;
+    if (!inRange(overduePolicy.lateInterval, 1, 10)) return false;
+  }
+  return true;
 }
 http.createServer(async (req, res) => {
   const path = req.url?.split('?')[0];
@@ -120,6 +146,22 @@ http.createServer(async (req, res) => {
         db.prepare("INSERT INTO snapshots(owner_id,scope,revision,data) VALUES(?,'personal',?,?) ON CONFLICT(owner_id) DO UPDATE SET revision=excluded.revision,data=excluded.data").run(user.id, revision + 1, JSON.stringify(snapshot));
         db.exec('COMMIT'); return send(res, 200, { revision: revision + 1 });
       } catch (error) { db.exec('ROLLBACK'); throw error; }
+    }
+    // ---- 用户偏好（跨设备「用户习惯」）----
+    // 与 snapshot 的关键差别：**不做乐观锁**。偏好是「最后改的人说了算」，
+    // 冲突代价只是某一项被覆盖，而 revision 冲突会逼用户做一次无意义的选择。
+    // 所以 PUT 直接覆盖，updatedAt 由**服务端**打（用客户端时钟会在设备时区/时钟不准时乱序）。
+    if (path === '/api/account/preferences' && req.method === 'GET') {
+      const row = db.prepare('SELECT updated_at,data FROM preferences WHERE owner_id=?').get(user.id);
+      return send(res, 200, { updatedAt: row?.updated_at || 0, preferences: row ? JSON.parse(row.data) : null });
+    }
+    if (path === '/api/account/preferences' && req.method === 'PUT') {
+      const { preferences } = await bodyOf(req);
+      if (!validPreferences(preferences)) return send(res, 400, { error: '提醒设置格式不正确' });
+      const updatedAt = Date.now();
+      db.prepare('INSERT INTO preferences(owner_id,updated_at,data) VALUES(?,?,?) ON CONFLICT(owner_id) DO UPDATE SET updated_at=excluded.updated_at,data=excluded.data')
+        .run(user.id, updatedAt, JSON.stringify(preferences));
+      return send(res, 200, { updatedAt });
     }
     send(res, 404, { error: '接口不存在' });
   } catch (error) { console.error('Account request failed:', error.name); send(res, 400, { error: '请求处理失败，请重试' }); }

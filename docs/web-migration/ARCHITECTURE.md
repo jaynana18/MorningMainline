@@ -139,7 +139,7 @@ export interface BridgeCapabilities {
 }
 
 /** 跨设备共用设置（2026-10-13 新增）。 */
-export interface SharedSettings { amapKey: string; travelMode: string }
+export interface SharedSettings { amapKey: string; travelMode: string; speechEnabled: boolean; overduePolicy: OverduePolicy }
 export const EMPTY_SHARED_SETTINGS: SharedSettings;
 
 export interface PlatformBridge {
@@ -180,7 +180,12 @@ export function createBridge(): PlatformBridge;
 - `platform/mock.ts` 必须提供纯内存实现，供单测与浏览器无持久化场景使用。
 - 浏览器宿主的 `writeSnapshot` 落 `IndexedDB`；`deviceInfo().id` 必须**持久化且稳定**（否则 `originID` 过滤失效 → 同步自激）。
 - 浏览器宿主 `parseWithModel` 在**无后端代理时返回 `null`**，绝不可把 API Key 打进前端产物。
-- **`amapKey` 同属敏感信息且浏览器宿主物理上做不到跨设备共享**：WebView 宿主下写进 App Group 并经 WCSession 广播给手表；浏览器宿主只能落 `localStorage`（仅本页有效，无手表）。这一点必须如实向用户呈现，不可假装同步成功。
+- 🔴 **高德 Key 是「开发者配置」而非用户数据**（2026-10-15 修订）：从用户界面**移除**，只在构建期由 `web/.env.local` 的 `VITE_AMAP_WEB_SERVICE_KEY` 注入，统一出口是 `platform/commute.ts` 的 `developerAmapKey()`。JS 启动时把该值写进 `settings`（`writeSettings`）以落 App Group 并广播手表 —— 因为 `Watch/WatchQuickCreateView.swift` 只能从 `settings.amapKey` 读。
+  - ⚠️ `VITE_` 前缀意味着 Key **会被打包进 JS 产物**。适用于自托管/内网部署；若 `web/dist` 要公开发布，删掉该变量即可，届时通勤功能自动降级为「未内置地图服务」提示（不会把 Key 送出去）。
+  - ⚠️ `iOS/WebHost.swift` 的 `settings.write` 必须写成「**只有传了 `amapKey` 才改**」。若沿用 `?? ""` 兜底，用户每改一次出行方式都会把 App Group 里的 Key 清空 → 手表随即失去 Key。
+- 🔴 **「用户习惯」三项（出行方式 / 语音播报 / 超时提醒间隔）跟账号走**：走 `platform/account.ts` 的 `withAccountSync` 代理 → `GET/PUT /api/account/preferences`。**LWW 而非乐观锁**（偏好冲突代价只是覆盖某一项），`updatedAt` 由服务端打。
+  - 🔴 `pullPreferences` **绝不能整体替换** —— 必须显式保留本机的 `amapKey`，否则「换个账号登录」会静默清空 Key（界面上已无输入框，用户无从发现）。
+- **`amapKey` 的跨设备共享在浏览器宿主物理上做不到**：WebView 宿主下写进 App Group 并经 WCSession 广播给手表；浏览器宿主只能落 `localStorage`（仅本页有效，无手表）。这一点必须如实向用户呈现，不可假装同步成功。
 - 桥的调用必须带超时与失败降级：任何原生方法抛错/超时（建议 5s）都不得让 UI 卡死，须回落到 `browser` 语义或返回 `null`。
 
 ### 4b.2 Pinia store 契约（`web/src/stores/routine.ts`）

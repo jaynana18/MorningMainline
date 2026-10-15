@@ -446,7 +446,13 @@ extension WebHost {
 
             case "settings.write":
                 // 这一步是手表拿到 Key 的唯一路径：写 App Group + 经 WCSession 广播。
-                store.setAmapKey(params["amapKey"] as? String ?? "")
+                // ⚠️ 只有 JS **显式传了** `amapKey` 才改动它。高德 Key 现在是开发者配置
+                // （构建期 env 注入，由 JS 在启动时灌一次），普通设置写入（出行方式、播报、
+                // 超时策略）压根不带这个字段 —— 若这里仍用 `?? ""` 兜底，用户每改一次
+                // 出行方式都会把 App Group 里的 Key 清空，手表随即失去 Key。
+                if let key = params["amapKey"] as? String {
+                    store.setAmapKey(key)
+                }
                 if let raw = params["travelMode"] as? String, let mode = TravelMode(rawValue: raw) {
                     store.setTravelMode(mode)
                 }

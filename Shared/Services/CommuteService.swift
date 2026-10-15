@@ -48,7 +48,7 @@ struct CommuteDestination: Identifiable, Hashable, Sendable {
 /// 通勤查询失败。文案与 `web/src/platform/commute.ts` 逐条对应，
 /// 保证同一个错误在手机和手表上说同一句话。
 enum CommuteError: LocalizedError {
-    /// 没填高德 Key。
+    /// 没有可用的高德 Key（开发者配置未注入 / 尚未从手机同步到手表）。
     case missingKey
     /// 没填目的地。
     case missingDestination
@@ -61,7 +61,7 @@ enum CommuteError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .missingKey: "请在通勤设置里填写高德 Web 服务 Key。"
+        case .missingKey: "地图服务还没就绪，暂时无法查询通勤。"
         case .missingDestination: "请填写目的地。"
         case .originRequired(let message): message
         case .selectionRequired(_, let message): message

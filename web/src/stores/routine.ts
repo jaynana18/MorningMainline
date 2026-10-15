@@ -36,7 +36,7 @@ import { isIncomplete } from '../core/session';
 import { RoutineStore } from '../core/store';
 import type { PlatformBridge } from '../platform/bridge';
 import { EMPTY_SHARED_SETTINGS, type SharedSettings } from '../platform/bridge';
-import type { CommuteRoute } from '../platform/commute';
+import { developerAmapKey, type CommuteRoute } from '../platform/commute';
 import { resolveBridge } from '../platform/hostBridge';
 
 // 重导出：视图层经 store 取用（避免直接 import core）。
@@ -45,7 +45,7 @@ export { deadlineStep, effectiveRecurrence, totalTaskDuration } from '../core/se
 // 预览页（PreviewView）需要的派生纯函数：只保留 task 步骤 / 计算某天的截止时刻。
 export { deadlineOn, taskSteps } from '../core/session';
 export { editTasks } from '../core/taskEdits';
-export { queryCommute } from '../platform/commute';
+export { queryCommute, developerAmapKey } from '../platform/commute';
 export type { TravelMode, CommuteRoute } from '../platform/commute';
 // 跨设备设置类型经 store 中转（视图层不直接 import platform/）。
 export type { SharedSettings } from '../platform/bridge';
@@ -225,6 +225,15 @@ export const useRoutineStore = defineStore('routine', () => {
     const stored = await bridge.readSnapshot();
     // 设置读失败不该拖垮 init —— 拿不到就用空值，交通方式回落开车。
     settings.value = await bridge.readSettings().catch(() => ({ ...EMPTY_SHARED_SETTINGS }));
+    // 高德 Key 是开发者配置（构建期 env），而 Apple Watch 的原生代码只会从
+    // App Group 里那份 `settings.amapKey` 读取。故启动时把 env 里的 Key 注入原生，
+    // 换 Key 只需重新构建 web 产物；不这样做手表上的「一句话创建」永远报「未配置」。
+    // 失败静默：浏览器宿主没有这条通道，降级为「本页可用」。
+    const developerKey = developerAmapKey();
+    if (developerKey && developerKey !== settings.value.amapKey) {
+      settings.value = { ...settings.value, amapKey: developerKey };
+      void bridge.writeSettings(settings.value).catch(() => { /* 原生不可达时静默 */ });
+    }
     routine = new RoutineStore({
       deviceRole: info.role,
       deviceID: info.id,

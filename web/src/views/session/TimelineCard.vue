@@ -289,6 +289,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import {
+  developerAmapKey,
   estimatedCompletion,
   estimatedDueDates,
   formatMinutes,
@@ -366,7 +367,12 @@ const undoSnapshot = ref<{
 } | null>(null);
 /** 保存那一刻的可重排顺序签名：用来区分「刚保存」与「之后任务线又被改动」。 */
 const undoSignature = ref('');
-const amapKey = ref((import.meta.env.VITE_AMAP_WEB_SERVICE_KEY as string | undefined) ?? '');
+/**
+ * 高德 Key 是**开发者配置**（构建期 `web/.env.local` 注入），不是用户设置 ——
+ * 所以不从这里读 `store.settings.amapKey`，也不再由界面填写。
+ * 由 `developerAmapKey()` 单一出口供给，避免「这个视图有 Key、那个视图没有」。
+ */
+const amapKey = ref(developerAmapKey());
 
 const rawTaskItems = computed(() => session.value?.progress.filter((item) => item.step.role === 'task') ?? []);
 function routeForItem(item: StepProgress) {
@@ -933,7 +939,7 @@ async function runReplans(): Promise<void> {
   }
   if (!amapKey.value.trim()) {
     replanBusy.value = false;
-    replanNotice.value = '未配置高德 Web 服务 Key，路段时长无法重算；保存后顺序生效，路线保持原样。';
+    replanNotice.value = '当前版本未内置地图服务，路段时长无法重算；保存后顺序生效，路线保持原样。';
     return;
   }
 

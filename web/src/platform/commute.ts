@@ -4,6 +4,8 @@ export type TravelMode = 'driving' | 'walking' | 'transit';
 export type CommuteRoute = CommuteInfo;
 export class OriginRequired extends Error {}
 export function destinationMapURL(key: string, location: string): string {
+  // 无 Key 时不拼一个注定 403 的坏 URL，直接返回空串让调用方不渲染图片。
+  if (!key.trim()) return '';
   return `https://restapi.amap.com/v3/staticmap?${new URLSearchParams({ key: key.trim(), location, zoom: '15', size: '480*240', markers: `mid,0xe5484d,A:${location}` })}`;
 }
 export interface CommuteDestination {
@@ -19,7 +21,23 @@ export class DestinationSelectionRequired extends Error {
     super(message);
   }
 }
-let currentKey = import.meta.env.VITE_AMAP_WEB_SERVICE_KEY || '';
+/**
+ * 构建期注入的高德 Web 服务 Key。
+ *
+ * ⚠️ 这是**开发者配置**，不是用户设置 —— 所以它不出现在个人中心界面里，
+ * 用户换设备/换账号也不需要重新填。要换 Key 由开发者改 `.env` 后重新构建。
+ *
+ * ⚠️ `VITE_` 前缀意味着这个值会被**打包进 JS 产物**（`dist/assets/index-*.js`）。
+ * 仅适合本地开发与自托管场景；若 web/dist 会被公开部署，请把
+ * `web/.env.local` 里这一行删掉 —— 届时本函数返回空串，通勤功能自动降级为
+ * 「未配置」提示，而不是把 Key 送到公开网络上。
+ */
+export function developerAmapKey(): string {
+  return ((import.meta.env.VITE_AMAP_WEB_SERVICE_KEY as string | undefined) ?? '').trim();
+}
+
+/** 最近一次查询用过的 Key，供 `commuteMapURL` 拼静态地图（它拿不到调用方参数）。 */
+let currentKey = developerAmapKey();
 let cachedOrigin: { location: string; time: number } | null = null;
 
 export function commuteMapURL(route: CommuteInfo): string {
@@ -42,7 +60,8 @@ export function commuteNavigationURL(route: CommuteInfo): string {
 
 /** 用户主动点击查询后才申请定位并将起终点发送给高德。 */
 export async function queryCommute(key: string, address: string, mode: TravelMode, selectedDestination?: CommuteDestination, originLocation?: string): Promise<CommuteRoute> {
-  if (!key.trim()) throw new Error('请在通勤设置里填写高德 Web 服务 Key。');
+  // 文案刻意不再指向「去设置里填」—— Key 是开发者配置，用户界面没有这个入口。
+  if (!key.trim()) throw new Error('当前版本未内置地图服务，暂时无法查询通勤。');
   currentKey = key.trim();
   if (!address.trim()) throw new Error('请填写目的地。');
   const request = async (path: string, params: Record<string, string>) => {

@@ -13,13 +13,11 @@
         </div>
       </section>
       <section class="mm-section">
-        <div class="mm-section-heading"><h3>提醒设置</h3><SessionIcon name="bell" :size="18" /></div>
-        <label class="mm-toggle profile-toggle">
+        <div class="mm-section-heading"><h3>提醒设置</h3><SessionIcon name="bell" :size="18" /></div>        <label class="mm-toggle profile-toggle">
           <input v-model="speechEnabled" type="checkbox" data-testid="speech-toggle" />
           应用内语音播报
         </label>
         <p class="mm-hint profile-data-note">提醒弹出时用语音念出内容，亮屏使用中同样出声。关闭后只保留弹窗，不再出声。</p>
-
         <!-- 超时提醒频率：两阶段。第二行的「切换点」刻意做成只读文本，
              保证两行指的是**同一个**数字 —— 若两边各放一个 select，用户改了一行
              会看到另一行没变，以为设置没生效。 -->
@@ -48,12 +46,10 @@
           </div>
           <p class="mm-hint profile-overdue-summary" data-testid="overdue-summary">{{ overdueSummary }}</p>
         </div>
+        <p class="mm-hint profile-data-note">以上两项跟随你的账号：换设备登录同一账号会自动带过去。</p>
       </section>
       <section class="mm-section">
         <div class="mm-section-heading"><h3>通勤设置</h3><SessionIcon name="route" :size="18" /></div>
-        <label>高德 Web 服务 Key
-          <input v-model="amapKey" type="password" autocomplete="off" class="mm-input" placeholder="粘贴高德开放平台的 Web 服务 Key" />
-        </label>
         <label>默认出行方式
           <select v-model="travelMode" class="mm-input">
             <option value="driving">开车</option>
@@ -61,7 +57,7 @@
             <option value="transit">公交 / 地铁</option>
           </select>
         </label>
-        <p class="mm-hint profile-data-note">填一次即可。Key 会同步到 Apple Watch，手表上的「一句话创建」用同一份 Key 搜索地点。</p>
+        <p class="mm-hint profile-data-note">地图与路线服务由应用内置，无需填写任何 Key。出行方式跟随你的账号。</p>
       </section>
       <section class="mm-section">
         <div class="mm-section-heading"><h3>账号与数据</h3><SessionIcon name="cloud" :size="18" /></div>
@@ -91,18 +87,15 @@ const store = useRoutineStore();
 const busy = ref(false), error = ref('');
 
 /**
- * 三个设置项从 store 读，**用 computed 的 getter/setter 而不是本地 ref**：
- * 设置的真实来源是 `routineStore.settings`（它由桥从 App Group / localStorage 读出），
+ * 两项设置从 store 读，**用 computed 的 getter/setter 而不是本地 ref**：
+ * 设置的真实来源是 `routineStore.settings`（它由桥读出、并随账号云同步），
  * 用本地 ref 会出现「页面显示旧值、实际已同步新值」的分叉。
  *
  * setter 里 `void` 掉 promise：保存是后台动作，`saveSettings` 已保证失败静默
  * （桥内部 catch + 回落），不该让输入框卡住或弹错。
+ *
+ * ⚠️ 高德 Key 不在这里 —— 它是**开发者配置**（构建期 env 注入），不是用户设置。
  */
-const amapKey = computed({
-  get: () => store.settings.amapKey,
-  set: (value: string) => void store.saveSettings({ amapKey: value }),
-});
-
 const travelMode = computed({
   get: () => store.settings.travelMode,
   set: (value: string) => void store.saveSettings({ travelMode: value }),

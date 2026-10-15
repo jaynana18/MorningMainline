@@ -107,7 +107,7 @@ struct WatchQuickCreateView: View {
                         resetCommutes()
                     }
                     if !hasKey {
-                        Text("还没有高德 Key。请先在手机上填一次，会同步到手表。没有 Key 也能创建，只是不计算路程。")
+                        Text("地图服务还没就绪。在手机上打开一次 App 就会同步过来。没有它也能创建，只是不计算路程。")
                             .font(.caption2)
                             .foregroundStyle(.orange)
                     }
@@ -209,7 +209,7 @@ struct WatchQuickCreateView: View {
     private func pickNextStop() async {
         guard stopIndex < stops.count else { return }
         guard hasKey else {
-            message = "没有高德 Key，已跳过地点选择。保存后仍会创建任务线，只是不含路程。"
+            message = "地图服务还没就绪，已跳过地点选择。保存后仍会创建任务线，只是不含路程。"
             stopIndex = stops.count
             return
         }
