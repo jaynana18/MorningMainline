@@ -671,3 +671,167 @@ describe('stores/reminders — 超时每 2 分钟循环提醒（可见 → 页�
   });
 });
 
+
+
+
+// ---------------------------------------------------------------------------
+// 语音播报（2026-10-16 新增）
+//
+// 用户诉求：「期望及时在使用手机的时候也总是能播报；屏幕亮时也要能播报到耳机；
+// 通知内容要播报当前是几点了、任务延误了几分钟了」。
+//
+// 注意：播报里的「现在几点」取自**系统时钟**（`new Date()`），因此每个触发播报的
+// 动作之前都必须先 `vi.setSystemTime(...)`，否则念的是测试机器的真实时间。
+// ---------------------------------------------------------------------------
+
+describe('stores/reminders — 语音播报', () => {
+  it('🔴 弹窗出现即播报，内容以「现在是 X 点 Y 分。」开头', async () => {
+    const bridge = makeBridge({ backgroundNotification: false });
+    const { reminders } = setup(bridge);
+
+    vi.setSystemTime(new Date(2026, 7, 13, 11, 59, 0));
+    await reminders.start();
+
+    expect(reminders.active?.key).toBe(`deadline:${SID}:-1`);
+    expect(bridge.speakCalls).toEqual([
+      '现在是11 点 59 分。距离计划结束还有 1 分钟。请确认最重要的任务正在推进。',
+    ]);
+  });
+
+  it('🔴 时刻取自「播报那一刻」，不是提醒原本的 fireAt', async () => {
+    const bridge = makeBridge({ backgroundNotification: false });
+    const { reminders } = setup(bridge);
+
+    vi.setSystemTime(new Date(2026, 7, 13, 11, 59, 0));
+    await reminders.start();
+    reminders.dismissAll();
+    bridge.speakCalls.length = 0;
+
+    // 12:00 那条里程碑直到 12:00:30 才被 tick 到 → 念的是 12 点 0 分。
+    vi.setSystemTime(new Date(2026, 7, 13, 12, 0, 30));
+    reminders.tick(new Date(2026, 7, 13, 12, 0, 30));
+
+    expect(reminders.active?.key).toBe(`deadline:${SID}:0`);
+    expect(bridge.speakCalls).toEqual([
+      '现在是12 点 0 分。计划时间到了。计划还没有完成，请先回到主线。',
+    ]);
+  });
+
+  it('⚠️ 队列里排队的提醒不播 —— 避免听到屏幕上没有的那条', async () => {
+    const bridge = makeBridge({ backgroundNotification: false });
+    const { reminders } = setup(bridge);
+
+    // 11:50 启动 → -10 里程碑到点并显示（同时播报一次）。
+    vi.setSystemTime(new Date(2026, 7, 13, 11, 50, 0));
+    await reminders.start();
+    expect(reminders.active?.key).toBe(`deadline:${SID}:-10`);
+    expect(bridge.speakCalls).toHaveLength(1);
+
+    bridge.speakCalls.length = 0;
+
+    // 12:00 再 tick：-1 与 0 两条同时到点。当前仍显示着 -10，故这两条进队列。
+    // （-5 / -3 早已超过 90s 补弹闸门 → 直接 skipped，见上一组用例。）
+    vi.setSystemTime(new Date(2026, 7, 13, 12, 0, 0));
+    reminders.tick(new Date(2026, 7, 13, 12, 0, 0));
+
+    expect(reminders.active?.key).toBe(`deadline:${SID}:-10`);
+    expect(reminders.queue.map((item) => item.key)).toEqual([
+      `deadline:${SID}:-1`,
+      `deadline:${SID}:0`,
+    ]);
+    // 关键：排队期间一次都不播 —— 播了就等于「听到的」和「看到的」对不上。
+    expect(bridge.speakCalls).toHaveLength(0);
+
+    // 关掉当前这条 → 队列前进 → 这时才播下一条。
+    reminders.dismiss();
+    expect(reminders.active?.key).toBe(`deadline:${SID}:-1`);
+    expect(bridge.speakCalls).toEqual([
+      '现在是12 点 0 分。距离计划结束还有 1 分钟。请确认最重要的任务正在推进。',
+    ]);
+  });
+
+  it('宿主无播报能力（speech=false）→ 完全不调用，弹窗照常', async () => {
+    const bridge = makeBridge({ backgroundNotification: false, speech: false });
+    const { reminders } = setup(bridge);
+
+    vi.setSystemTime(new Date(2026, 7, 13, 11, 59, 0));
+    await reminders.start();
+
+    expect(reminders.active?.key).toBe(`deadline:${SID}:-1`);
+    expect(bridge.speakCalls).toHaveLength(0);
+  });
+
+  it('后台通道不播报（人没看屏幕时不该抢占音频，交给系统通知）', async () => {
+    const bridge = makeBridge({ backgroundNotification: false, speech: true });
+    const { reminders } = setup(bridge);
+
+    vi.setSystemTime(new Date(2026, 7, 13, 11, 45, 0));
+    await reminders.start();
+    bridge.speakCalls.length = 0;
+
+    reminders.visible = false;
+    reminders.tick(new Date(2026, 7, 13, 12, 0, 0));
+
+    expect(bridge.presentNotificationCalls.length).toBeGreaterThan(0);
+    expect(bridge.speakCalls).toHaveLength(0);
+  });
+
+  it('🔴 超时循环：每一轮重新弹窗时都重新播报，延误分钟随轮次递增', async () => {
+    const startedAt = new Date(2026, 7, 13, 11, 0, 0);
+    const task = createProgress({
+      id: 'P-SPK',
+      step: createStep({ title: '写代码', duration: 10 * 60 }),
+      dueAt: new Date(2026, 7, 13, 11, 10, 0),
+      state: 'active',
+      startedAt,
+    });
+    const session = createSession({
+      id: SID,
+      templateID: 'T',
+      templateName: '任务线',
+      templateSymbol: 'sun.max.fill',
+      startedAt,
+      plannedStartAt: startedAt,
+      // targetDeadline 设 null：不产里程碑，隔离出超时这一条。
+      targetDeadline: null,
+      state: 'running',
+      primaryDevice: 'phone',
+      progress: [task],
+      remainingBuffer: 0,
+      updatedAt: startedAt,
+      revision: 1,
+      activeProgressID: task.id,
+    });
+    const bridge = createMockBridge({
+      initialSnapshot: createSnapshot({
+        templates: [],
+        activeSession: session,
+        updatedAt: session.updatedAt,
+      }),
+      capabilities: { backgroundNotification: false },
+    });
+    const { reminders } = setup(bridge);
+
+    vi.setSystemTime(startedAt);
+    await reminders.start();
+    bridge.speakCalls.length = 0;
+
+    // 11:12 → 超时 2 分钟 → 第 0 轮。
+    vi.setSystemTime(new Date(2026, 7, 13, 11, 12, 0));
+    reminders.tick(new Date(2026, 7, 13, 11, 12, 0));
+    expect(reminders.active?.key).toBe('overdue:P-SPK:0');
+    expect(bridge.speakCalls).toEqual([
+      '现在是11 点 12 分。“写代码”已经延误 2 分钟了，先把它收尾。',
+    ]);
+    reminders.dismiss();
+
+    // 11:14 → 第 1 轮，延误 4 分钟。
+    vi.setSystemTime(new Date(2026, 7, 13, 11, 14, 0));
+    reminders.tick(new Date(2026, 7, 13, 11, 14, 0));
+    expect(reminders.active?.key).toBe('overdue:P-SPK:1');
+    expect(bridge.speakCalls).toHaveLength(2);
+    expect(bridge.speakCalls[1]).toBe(
+      '现在是11 点 14 分。“写代码”已经延误 4 分钟了，先把它收尾。',
+    );
+  });
+});

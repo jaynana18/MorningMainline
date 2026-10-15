@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import UserNotifications
+import OSLog
 
 @main
 struct MorningMainlineApp: App {
@@ -79,6 +80,8 @@ struct MorningMainlineApp: App {
             didReceive response: UNNotificationResponse
         ) async {
             await MainActor.run {
+                Logger(subsystem: "com.jaynana.MorningMainline", category: "WebLifecycle")
+                    .notice("Notification opened through launch delegate")
                 WebHost.NotificationInbox.store(response: response)
             }
         }

@@ -415,3 +415,115 @@ describe('platform/browser — 前台去重第二层（页面可见时不发系�
     expect(constructed).toHaveLength(1);
   });
 });
+
+// ---------------------------------------------------------------------------
+// 语音播报（2026-10-16 新增）
+// ---------------------------------------------------------------------------
+
+describe('platform — 语音播报（speak）', () => {
+  it('浏览器宿主：Node 环境无 speechSynthesis → 能力为 false，speak 静默 no-op', async () => {
+    const bridge = createBrowserBridge();
+    expect(bridge.capabilities.speech).toBe(false);
+    // 无能力时绝不抛错（§4b.1：绝不可拖住提醒引擎）。
+    await expect(bridge.speak('现在是9 点 5 分。')).resolves.toBeUndefined();
+  });
+
+  it('浏览器宿主：有 speechSynthesis 时按 zh-CN 发声，且先 cancel 上一句', async () => {
+    const spoken: string[] = [];
+    let cancelCount = 0;
+    class FakeUtterance {
+      lang = '';
+      constructor(public text: string) {}
+    }
+    vi.stubGlobal('SpeechSynthesisUtterance', FakeUtterance);
+    vi.stubGlobal('window', {
+      speechSynthesis: {
+        cancel: () => {
+          cancelCount += 1;
+        },
+        speak: (u: FakeUtterance) => {
+          spoken.push(u.text);
+        },
+      },
+    });
+
+    const bridge = createBrowserBridge();
+    expect(bridge.capabilities.speech).toBe(true);
+
+    await bridge.speak('现在是9 点 5 分。到点了，现在做“写周报”。');
+    expect(spoken).toEqual(['现在是9 点 5 分。到点了，现在做“写周报”。']);
+    // 每次播报前 cancel：提醒是「此时这一件」，旧的那句该让位。
+    expect(cancelCount).toBe(1);
+  });
+
+  it('浏览器宿主：空文本不产生任何发声调用', async () => {
+    let calls = 0;
+    vi.stubGlobal('SpeechSynthesisUtterance', class {});
+    vi.stubGlobal('window', {
+      speechSynthesis: {
+        cancel: () => {},
+        speak: () => {
+          calls += 1;
+        },
+      },
+    });
+
+    await createBrowserBridge().speak('');
+    expect(calls).toBe(0);
+  });
+
+  it('WebView 宿主：speak 经 speech.speak 桥方法发出，参数为 text', async () => {
+    const posted: { id: string; method: string; params: Record<string, unknown> }[] = [];
+    const host = {
+      webkit: {
+        messageHandlers: {
+          mainline: {
+            postMessage: (message: { id: string; method: string; params: Record<string, unknown> }) => {
+              posted.push(message);
+              // 同步回执，模拟原生：否则要干等 5s 超时（且会掩盖真实失败）。
+              (host as unknown as { __mainlineReply?: (r: unknown) => void }).__mainlineReply?.({
+                id: message.id,
+                ok: true,
+              });
+            },
+          },
+        },
+      },
+      __mainlineReply: undefined as unknown,
+    };
+    vi.stubGlobal('window', host);
+
+    const bridge = new WebViewBridge();
+    expect(bridge.capabilities.speech).toBe(true);
+
+    await bridge.speak('现在是11 点 12 分。“写代码”已经延误 2 分钟了，先把它收尾。');
+
+    const call = posted.find((item) => item.method === 'speech.speak');
+    expect(call).toBeDefined();
+    expect(call!.params).toEqual({
+      text: '现在是11 点 12 分。“写代码”已经延误 2 分钟了，先把它收尾。',
+    });
+  });
+
+  it('WebView 宿主：空文本不发消息（省一次无意义的桥往返）', async () => {
+    const posted: string[] = [];
+    vi.stubGlobal('window', {
+      webkit: {
+        messageHandlers: {
+          mainline: {
+            postMessage: (message: { id: string; method: string }) => {
+              posted.push(message.method);
+              (window as unknown as { __mainlineReply?: (r: unknown) => void }).__mainlineReply?.({
+                id: message.id,
+                ok: true,
+              });
+            },
+          },
+        },
+      },
+    });
+
+    await new WebViewBridge().speak('');
+    expect(posted).toHaveLength(0);
+  });
+});

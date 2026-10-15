@@ -49,6 +49,18 @@ export interface ReminderMessage {
   /** task 提醒才有；里程碑为 null。 */
   progressID: string | null;
   sessionID: string;
+  /**
+   * **播报正文**（不含时刻前缀，时刻由 {@link speechText} 在播报那一刻拼上）。
+   *
+   * 与 `title` / `body` 是**不同用途的文案**，不是它们的副本：
+   * `title`/`body` 是给眼睛看的（带 `不跑偏 · ` 前缀、emoji、全角引号、冒号），
+   * 直接念出来会变成「不跑偏 点 去厕所」这种噪音；这里写的是**能听懂的口语**。
+   *
+   * ⚠️ 本字段是 TS 侧的**单向扩展**：Swift `ReminderScheduler.swift` 不产出它
+   * （原生不播报，只排通知）。因此它**不属于**「逐字镜像」约束的范围，
+   * 但文案本身仍必须只在本模块生成 —— 视图层与 platform 层一律不得各写一份。
+   */
+  speech: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -140,6 +152,8 @@ export function taskReminder(progress: StepProgress, sessionID: string): Reminde
     minuteOffset: null,
     progressID: progress.id,
     sessionID,
+    // 播报给耳朵听：`title` 的「不跑偏 · 」前缀与 emoji 念出来是噪音，故另写一句口语。
+    speech: `到点了，现在做“${progress.step.title}”。`,
   };
 }
 
@@ -164,6 +178,7 @@ export function deadlineMilestoneReminder(
   let title: string;
   let body: string;
   let sound: ReminderSound;
+  let speech: string;
 
   if (minuteOffset < 0) {
     title = `不跑偏 · 距离 Deadline ${label}`;
@@ -172,6 +187,12 @@ export function deadlineMilestoneReminder(
         ? `当前任务：${currentTaskTitle}`
         : '请确认最重要的任务正在推进。';
     sound = 'default';
+    // 口语里不说「Deadline」（TTS 会念成英文词），改说「计划结束」。
+    speech =
+      `距离计划结束还有 ${-minuteOffset} 分钟。` +
+      (currentTaskTitle !== null
+        ? `当前在做“${currentTaskTitle}”。`
+        : '请确认最重要的任务正在推进。');
   } else if (minuteOffset === 0) {
     title = '⏰ Deadline 到了';
     body =
@@ -179,6 +200,11 @@ export function deadlineMilestoneReminder(
         ? `当前任务“${currentTaskTitle}”还没完成，请先回到主线。`
         : '计划还没有完成，请先回到主线。';
     sound = 'overdue';
+    speech =
+      '计划时间到了。' +
+      (currentTaskTitle !== null
+        ? `“${currentTaskTitle}”还没完成，请先回到主线。`
+        : '计划还没有完成，请先回到主线。');
   } else {
     title = `🚨 Deadline ${label}`;
     body =
@@ -186,6 +212,11 @@ export function deadlineMilestoneReminder(
         ? `当前任务“${currentTaskTitle}”仍未完成，请先把它收尾。`
         : '计划仍未完成，请立即回到主线。';
     sound = 'overdue';
+    speech =
+      `计划已经延误 ${minuteOffset} 分钟。` +
+      (currentTaskTitle !== null
+        ? `“${currentTaskTitle}”仍未完成，请先把它收尾。`
+        : '计划仍未完成，请立即回到主线。');
   }
 
   return {
@@ -199,6 +230,7 @@ export function deadlineMilestoneReminder(
     minuteOffset,
     progressID: null,
     sessionID,
+    speech,
   };
 }
 
@@ -398,6 +430,8 @@ export function overdueReminder(
     minuteOffset: null,
     progressID: progress.id,
     sessionID,
+    // 用户明确要求「播报当前是几点、任务延误了几分钟」——延误分钟数在这里给出。
+    speech: `“${progress.step.title}”已经延误 ${minutes} 分钟了，先把它收尾。`,
   };
 }
 
@@ -415,4 +449,36 @@ export function overdueRound(overdueSeconds: number): number {
     return -1;
   }
   return Math.floor(overdueSeconds / OVERDUE_REPEAT_SECONDS) - 1;
+}
+
+// ---------------------------------------------------------------------------
+// 语音播报正文（2026-10-16 新增）
+// ---------------------------------------------------------------------------
+
+/**
+ * 「现在是 X 点 Y 分。」——播报开头必带的一句。
+ *
+ * 为什么用中文数字而不是 `Intl` 的本地化输出：本项目的跨端一致性测试靠**逐字断言**，
+ * 而 `Intl` / `toLocaleTimeString` 的产物随 ICU 数据与 locale 漂移，会把测试变成假绿。
+ * 这里的读法也是中文里最自然的念法（「九点零五分」「十四点三十分」都听得懂）。
+ *
+ * 口径与 `ReminderOverlay.vue:clock()` 一致（都用 `getHours()` / `getMinutes()`，
+ * 即**设备本地时区**），确保「看到的钟点」与「听到的钟点」不会打架。
+ */
+export function spokenClock(at: Date): string {
+  return `${at.getHours()} 点 ${at.getMinutes()} 分`;
+}
+
+/**
+ * 播报全文 = 时刻前缀 + 该条提醒的口语正文。
+ *
+ * ⚠️ `now` 必须由**调用方在播报那一刻**传入，而不是复用 `reminder.fireAt`：
+ * 超时循环提醒会持续好几轮，用 `fireAt` 会念出一个早已过去的时刻，
+ * 与用户「现在几点」的诉求正好相反。
+ *
+ * 中文标点读起来是停顿，不影响 TTS；保持与 `body` 同样的全角风格，
+ * 是为了让两处文案在人工比对时看起来是一套。
+ */
+export function speechText(reminder: ReminderMessage, now: Date): string {
+  return `现在是${spokenClock(now)}。${reminder.speech}`;
 }

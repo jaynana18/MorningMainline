@@ -4,6 +4,7 @@ import UIKit
 import UserNotifications
 import WebKit
 import CoreLocation
+import OSLog
 
 /// 仅在用户查询路线时请求一次定位，结束后停止。
 @MainActor
@@ -197,6 +198,9 @@ extension WebHost {
 
         /// JS 侧 `window.__mainlineEmit` 是否已就绪。`didFinish` 置 true；开始导航 / 加载失败置 false。
         private var isPageReady = false
+        private var needsContentRecovery = false
+        private var attemptedContentRecovery = false
+        private static let lifecycleLog = Logger(subsystem: "com.jaynana.MorningMainline", category: "WebLifecycle")
 
         /// Vue 页内提醒引擎是否已经完成订阅并可承接前台提醒。
         /// 只有为 true 时才抑制系统横幅；否则由系统横幅兜底，避免 WebView 失败时静默漏提醒。
@@ -227,6 +231,8 @@ extension WebHost {
             let controller = webView.configuration.userContentController
             controller.add(self, name: Self.handlerName)
             controller.addUserScript(Self.uuidPolyfillScript)
+            controller.addUserScript(Self.diagnosticsScript)
+            Self.lifecycleLog.notice("WebView attached")
 
             // 原生 → JS 的快照广播：Watch / 对端推来的变更经 `store.apply(_:)` 落库后触发。
             snapshotSubscription = store.$snapshot
@@ -299,7 +305,10 @@ extension WebHost {
                 object: nil,
                 queue: .main
             ) { [weak self] _ in
-                Task { @MainActor in self?.emitAppState(visible: false) }
+                Task { @MainActor in
+                    self?.attemptedContentRecovery = false
+                    self?.emitAppState(visible: false)
+                }
             })
             appStateObservers.append(NotificationCenter.default.addObserver(
                 forName: UIApplication.willEnterForegroundNotification,
@@ -313,7 +322,10 @@ extension WebHost {
                 object: nil,
                 queue: .main
             ) { [weak self] _ in
-                Task { @MainActor in self?.emitAppState(visible: true) }
+                Task { @MainActor in
+                    self?.recoverContentIfNeeded()
+                    self?.emitAppState(visible: true)
+                }
             })
 
             Self.loadStartPage(in: webView)
@@ -396,6 +408,11 @@ extension WebHost {
 
         private func handle(id: String, method: String, params: [String: Any]) async {
             switch method {
+            case "diagnostics.js":
+                // 不记录通知内容、账号或请求参数；错误详情按隐私字段写入系统日志。
+                let detail = String((params["detail"] as? String ?? "JS error").prefix(2000))
+                Self.lifecycleLog.error("JS exception: \(detail, privacy: .private)")
+
             case "account.request":
                 await requestAccount(id: id, params: params)
 
@@ -445,6 +462,16 @@ extension WebHost {
 
             case "notifications.foregroundReady":
                 isForegroundReminderReady = params["ready"] as? Bool == true
+                reply(id: id)
+
+            case "speech.speak":
+                // 应用内 TTS。与系统「播报通知」无关 —— 那条只在锁屏/熄屏时生效，
+                // 亮屏使用中系统一律不念，且 App 无法改变。用户要的「亮屏也播报」
+                // 只能靠这里自己念（见 SpeechAnnouncer.swift 的类注释）。
+                //
+                // 播报是「发出即完成」，不等待念完再回执：念一句话要好几秒，
+                // 让 JS 等回执会拖住提醒引擎的 tick。
+                SpeechAnnouncer.shared.speak(params["text"] as? String ?? "")
                 reply(id: id)
 
             case "parse.withModel":
@@ -623,12 +650,17 @@ extension WebHost {
         /// 复用 `emit(event:payload:)`，因此自动继承「页面就绪前入队 / `didFinish` 后按序 flush /
         /// `evaluateJavaScript` 失败延迟重试」的全部投递保障，不另起投递路径。
         private func emitAppState(visible: Bool) {
+            Self.lifecycleLog.notice("App visibility: \(visible)")
             emit(event: "app.state", payload: ["visible": visible])
         }
 
         /// 投递单个事件。先在 JS 内判断入口函数是否存在，未就绪时返回 `false`，避免 WebKit
         /// 把正常的启动等待窗口打印成 TypeError；返回 false 或执行报错时再延迟重试。
         private func deliver(event: String, payload: [String: Any], attempt: Int) {
+            guard isPageReady else {
+                emit(event: event, payload: payload)
+                return
+            }
             guard let json = Self.jsonString(payload), let webView else { return }
             let script = """
             (function () {
@@ -640,7 +672,16 @@ extension WebHost {
             webView.evaluateJavaScript(script) { [weak self] result, error in
                 let delivered = error == nil && (result as? Bool) == true
                 guard !delivered else { return }
-                guard let self, attempt < Self.maxDeliveryAttempts else { return }
+                guard let self else { return }
+                // 页面已死亡或开始导航时，将在途通知放回队列，等待新页面就绪。
+                guard self.isPageReady else {
+                    self.emit(event: event, payload: payload)
+                    return
+                }
+                guard attempt < Self.maxDeliveryAttempts else {
+                    Self.lifecycleLog.error("Bridge delivery exhausted: \(event, privacy: .public)")
+                    return
+                }
                 Task { @MainActor in
                     try? await Task.sleep(
                         nanoseconds: UInt64(Self.deliveryRetryInterval * 1_000_000_000)
@@ -685,6 +726,7 @@ extension WebHost {
         /// 注意：`didFinish` 只保证文档加载完毕，JS bundle 可能仍在执行；未挂上时靠 `deliver` 重试补上。
         nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             Task { @MainActor in
+                Self.lifecycleLog.notice("Navigation finished")
                 self.isPageReady = true
                 let buffered = self.pendingEvents
                 self.pendingEvents.removeAll()
@@ -713,6 +755,8 @@ extension WebHost {
             withError error: Error
         ) {
             Task { @MainActor in
+                let failure = error as NSError
+                Self.lifecycleLog.error("Navigation failed: \(failure.domain, privacy: .public) / \(failure.code)")
                 self.isPageReady = false
                 self.isForegroundReminderReady = false
             }
@@ -725,6 +769,8 @@ extension WebHost {
             withError error: Error
         ) {
             Task { @MainActor in
+                let failure = error as NSError
+                Self.lifecycleLog.error("Navigation failed: \(failure.domain, privacy: .public) / \(failure.code)")
                 self.isPageReady = false
                 self.isForegroundReminderReady = false
             }
@@ -733,8 +779,27 @@ extension WebHost {
         /// Web 内容进程被系统终止后，页内提醒已不可能工作；立即恢复系统横幅兜底。
         nonisolated func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
             Task { @MainActor in
+                Self.lifecycleLog.error("Web content process terminated")
                 self.isPageReady = false
                 self.isForegroundReminderReady = false
+                self.needsContentRecovery = true
+                self.recoverContentIfNeeded()
+            }
+        }
+
+        /// 仅恢复已确认终止的内容进程；后台等待 active，正常前台切换不 reload。
+        private func recoverContentIfNeeded() {
+            guard needsContentRecovery,
+                  !attemptedContentRecovery,
+                  UIApplication.shared.applicationState == .active,
+                  let webView else { return }
+            attemptedContentRecovery = true
+            needsContentRecovery = false
+            Self.lifecycleLog.notice("Recovering terminated web content")
+            // reload 保留当前 hash 路由；持久化任务由原有 snapshot.read 初始化恢复。
+            // 每次前台周期最多自动恢复一次，避免异常产物反复崩溃形成重载循环。
+            if webView.reload() == nil {
+                Self.loadStartPage(in: webView)
             }
         }
 
@@ -787,9 +852,31 @@ extension WebHost {
                 return
             }
             await MainActor.run {
+                Self.lifecycleLog.notice("Notification opened after attach; page ready: \(self.isPageReady)")
                 self.emit(event: "notification.opened", payload: payload)
             }
         }
+
+        /// 在 Vue 启动前捕获脚本错误，包含启动失败与未处理的 Promise 异常。
+        private static let diagnosticsScript = WKUserScript(source: """
+        (function () {
+          var count = 0;
+          function report(detail) {
+            if (++count > 20) return;
+            window.webkit.messageHandlers.mainline.postMessage({
+              id: 'diagnostic', method: 'diagnostics.js',
+              params: { detail: String(detail).slice(0, 2000) }
+            });
+          }
+          window.addEventListener('error', function (event) {
+            report(event.error && event.error.stack || event.message || 'Resource load error');
+          }, true);
+          window.addEventListener('unhandledrejection', function (event) {
+            report(event.reason && event.reason.stack || event.reason);
+          });
+          window.addEventListener('mainline:vue-error', function (event) { report(event.detail); });
+        })();
+        """, injectionTime: .atDocumentStart, forMainFrameOnly: true)
 
         // MARK: crypto.randomUUID 兜底
 

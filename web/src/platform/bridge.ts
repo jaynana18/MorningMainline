@@ -40,6 +40,14 @@ export interface BridgeCapabilities {
   modelParsing: boolean;
   /** 主屏小组件 / 表盘：WebView=true，浏览器=false。 */
   widget: boolean;
+  /**
+   * 语音播报（TTS）：WebView=true（原生 `AVSpeechSynthesizer`）；
+   * 浏览器=看 `speechSynthesis` 是否存在（Safari/Chrome 有，Node 测试环境没有）。
+   *
+   * ⚠️ 与系统「播报通知」是**两回事**：后者是 Siri 的系统级功能，只在锁屏/熄屏时生效；
+   * 这条能力是 App 自己念，亮屏时同样出声 —— 正是用户要的那条路径。
+   */
+  speech: boolean;
 }
 
 /** 通知级别（`notifications.present`）。 */
@@ -97,6 +105,18 @@ export interface PlatformBridge {
   presentNotification(payload: NotificationPayload): Promise<void>;
   /** 告知原生前台页内提醒通道是否已就绪；未就绪时原生保留系统横幅兜底。 */
   setForegroundReminderReady(ready: boolean): Promise<void>;
+
+  /**
+   * 用设备语音念一段话（TTS）。
+   *
+   * **为什么需要它**：iOS 的「播报通知」是系统级 Siri 功能，只在锁屏/熄屏时生效，
+   * 亮屏使用中一律不念（系统认定你在看屏幕）。要做到「亮屏也播报」，只有 App
+   * 自己念这一条路。因此这里刻意**不**依赖通知通道，而是在页内弹窗真正显示时调用。
+   *
+   * 宿主无能力时**必须静默降级**（不得抛错、不得阻塞调用方）：
+   * 无声总好过卡住提醒引擎（§4b.1）。
+   */
+  speak(text: string): Promise<void>;
 
   /** 云端语义解析。宿主无能力时 resolve(null)，调用方静默回退纯规则。 */
   parseWithModel(input: string): Promise<ParseResult | null>;

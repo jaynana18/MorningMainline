@@ -39,6 +39,8 @@ export class MockBridge implements PlatformBridge {
   readonly replaceNotificationsCalls: (RoutineSession | null)[] = [];
   readonly presentNotificationCalls: NotificationPayload[] = [];
   readonly foregroundReminderReadyStates: boolean[] = [];
+  /** 每次 `speak` 的文本，供断言「播报内容含时刻与延误分钟」。 */
+  readonly speakCalls: string[] = [];
   readonly parseWithModelCalls: string[] = [];
   /** 每次 `writeSettings` 的快照，供断言「填 Key 后是否真的写下去」。 */
   readonly writeSettingsCalls: SharedSettings[] = [];
@@ -70,6 +72,8 @@ export class MockBridge implements PlatformBridge {
       backgroundNotification: false,
       modelParsing: this.modelParseResult !== null,
       widget: false,
+      // 测试里默认「能播报」，好让 stores 层的播报断言不必逐个开能力。
+      speech: true,
       ...options.capabilities,
     };
   }
@@ -113,6 +117,10 @@ export class MockBridge implements PlatformBridge {
 
   async setForegroundReminderReady(ready: boolean): Promise<void> {
     this.foregroundReminderReadyStates.push(ready);
+  }
+
+  async speak(text: string): Promise<void> {
+    this.speakCalls.push(text);
   }
 
   async parseWithModel(input: string): Promise<ParseResult | null> {

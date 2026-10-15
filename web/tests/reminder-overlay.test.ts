@@ -46,6 +46,7 @@ function reminder(overrides: Partial<ReminderMessage> = {}): ReminderMessage {
     minuteOffset: null,
     progressID: 'p1',
     sessionID: 's1',
+    speech: '到点了，现在做“去厕所”。',
     ...overrides,
   };
 }

@@ -11,7 +11,7 @@
     <key>CFBundleShortVersionString</key>
     <string>1.0</string>
     <key>CFBundleVersion</key>
-    <string>3</string>
+    <string>4</string>
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>用于搜索附近的目的地并计算任务之间的通勤时间。</string>
     <key>NSLocalNetworkUsageDescription</key>

@@ -16,7 +16,10 @@ import {
   allReminders,
   deadlineMilestoneReminder,
   focusedTask,
+  overdueReminder,
   planReminders,
+  speechText,
+  spokenClock,
   taskAdvanceBody,
   taskReminder,
 } from '../src/core/reminders';
@@ -474,5 +477,131 @@ describe('reminders — 系统通道专用文案（Swift ReminderScheduler）', 
     const titles = allReminders(session).map((m) => m.title);
     expect(titles).not.toContain(TASK_ADVANCE_TITLE);
     expect(titles).not.toContain(COMMUTE_DEPART_TITLE);
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// 7) 语音播报正文（2026-10-16 新增）
+// ---------------------------------------------------------------------------
+
+describe('reminders — 语音播报正文（speech / speechText）', () => {
+  it('spokenClock 用 24 小时制、与设备本地时区一致（不靠 Intl，避免假绿）', () => {
+    // TZ=Asia/Shanghai 下 getHours() 即本地钟点。
+    expect(spokenClock(new Date(2026, 7, 13, 9, 5, 0))).toBe('9 点 5 分');
+    expect(spokenClock(new Date(2026, 7, 13, 14, 30, 0))).toBe('14 点 30 分');
+    expect(spokenClock(new Date(2026, 7, 13, 0, 0, 0))).toBe('0 点 0 分');
+  });
+
+  it('speechText = 「现在是 X 点 Y 分。」+ 该条播报正文', () => {
+    const reminder = taskReminder(
+      createProgress({
+        id: 'P-SP',
+        step: createStep({ title: '写周报', duration: 600 }),
+        dueAt: new Date(2026, 7, 13, 12, 0, 0),
+      }),
+      SESSION_ID,
+    )!;
+    expect(reminder.speech).toBe('到点了，现在做“写周报”。');
+    expect(speechText(reminder, new Date(2026, 7, 13, 9, 5, 0))).toBe(
+      '现在是9 点 5 分。到点了，现在做“写周报”。',
+    );
+  });
+
+  it('⚠️ 时刻取自调用方传入的 now，而非 reminder.fireAt', () => {
+    // 起点 11:00、时长 10 分钟 → 11:10 起超时；11:12:05 时超时 125 秒 → ceil = 3 分钟。
+    const progress = createProgress({
+      id: 'P-OVD-SP',
+      step: createStep({ title: '写代码', duration: 10 * 60 }),
+      dueAt: new Date(2026, 7, 13, 11, 10, 0),
+      state: 'active',
+      startedAt: new Date(2026, 7, 13, 11, 0, 0),
+    });
+    const reminder = overdueReminder(progress, SESSION_ID, new Date(2026, 7, 13, 11, 12, 5), 0)!;
+
+    // fireAt 是「构建这条提醒的时刻」；播报时若已过两分钟，念出的应是 11:14 而不是 11:12。
+    // 这正是超时循环提醒的真实场景（同一条 reminder 会被反复播报）。
+    expect(speechText(reminder, new Date(2026, 7, 13, 11, 12, 5))).toBe(
+      '现在是11 点 12 分。“写代码”已经延误 3 分钟了，先把它收尾。',
+    );
+    expect(speechText(reminder, new Date(2026, 7, 13, 11, 14, 0))).toBe(
+      '现在是11 点 14 分。“写代码”已经延误 3 分钟了，先把它收尾。',
+    );
+  });
+
+  it('🔴 超时播报含「延误了几分钟」—— 用户明确要求', () => {
+    const progress = createProgress({
+      id: 'P-MIN',
+      step: createStep({ title: '写代码', duration: 10 * 60 }),
+      dueAt: new Date(2026, 7, 13, 11, 10, 0),
+      state: 'active',
+      startedAt: new Date(2026, 7, 13, 11, 0, 0),
+    });
+    expect(
+      overdueReminder(progress, SESSION_ID, new Date(2026, 7, 13, 11, 12, 5), 0)!.speech,
+    ).toBe('“写代码”已经延误 3 分钟了，先把它收尾。');
+    // 满 4 分钟那一轮 → 念 4 分钟。
+    expect(
+      overdueReminder(progress, SESSION_ID, new Date(2026, 7, 13, 11, 14, 0), 1)!.speech,
+    ).toBe('“写代码”已经延误 4 分钟了，先把它收尾。');
+  });
+
+  it('播报正文不含给眼睛看的前缀 / emoji（念出来是噪音）', () => {
+    const task = taskReminder(
+      createProgress({
+        id: 'P-NOISE',
+        step: createStep({ title: '刷牙', duration: 180 }),
+        dueAt: new Date(2026, 7, 13, 8, 0, 0),
+      }),
+      SESSION_ID,
+    )!;
+    expect(task.title).toBe('不跑偏 · 刷牙');
+    expect(task.speech).not.toContain('不跑偏');
+    expect(task.speech).not.toContain('·');
+
+    // 里程碑三种形态都不该把 emoji / 英文词喂给 TTS。
+    const milestone = deadlineMilestoneReminder(
+      0,
+      '计划时间到了',
+      '刷牙',
+      SESSION_ID,
+      new Date(2026, 7, 13, 12, 0, 0),
+    );
+    expect(milestone.title).toBe('⏰ Deadline 到了');
+    expect(milestone.speech).toBe('计划时间到了。“刷牙”还没完成，请先回到主线。');
+    expect(milestone.speech).not.toContain('⏰');
+    expect(milestone.speech).not.toContain('Deadline');
+  });
+
+  it('里程碑播报的三种形态（提前 / 到点 / 延误）', () => {
+    const at = new Date(2026, 7, 13, 12, 0, 0);
+    expect(deadlineMilestoneReminder(-5, '还剩 5 分钟', '写周报', SESSION_ID, at).speech).toBe(
+      '距离计划结束还有 5 分钟。当前在做“写周报”。',
+    );
+    // 无当前任务 → 走兜底分支，不得出现「在做“null”」这类嗓音。
+    expect(deadlineMilestoneReminder(-5, '还剩 5 分钟', null, SESSION_ID, at).speech).toBe(
+      '距离计划结束还有 5 分钟。请确认最重要的任务正在推进。',
+    );
+    expect(deadlineMilestoneReminder(4, '已延误 4 分钟', '写周报', SESSION_ID, at).speech).toBe(
+      '计划已经延误 4 分钟。“写周报”仍未完成，请先把它收尾。',
+    );
+  });
+
+  it('每个 ReminderMessage 都带非空 speech（漏一个就是一条哑巴提醒）', () => {
+    const progress = createProgress({
+      id: 'P-ALL',
+      step: createStep({ title: '语文', duration: 3600 }),
+      dueAt: new Date(2026, 7, 13, 9, 0, 0),
+    });
+    const session = sessionWith({
+      targetDeadline: new Date(2026, 7, 13, 12, 0, 0),
+      progress: [progress],
+    });
+    const reminders = allReminders(session);
+    // 1 条 task + 8 条里程碑。
+    expect(reminders).toHaveLength(9);
+    for (const reminder of reminders) {
+      expect(reminder.speech.length).toBeGreaterThan(0);
+    }
   });
 });

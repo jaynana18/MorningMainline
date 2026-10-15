@@ -26,6 +26,7 @@ import {
   overdueReminder,
   overdueRound,
   overdueSecondsOf,
+  speechText,
   type ReminderMessage,
 } from '../core/reminders';
 import type { PlatformBridge } from '../platform/bridge';
@@ -103,6 +104,27 @@ export const useRemindersStore = defineStore('reminders', () => {
   let started = false;
 
   /**
+   * **显示**一条弹窗并同步播报。
+   *
+   * 这是「看的」与「听的」的唯一汇合点 —— 保证两者永远不会错位：
+   * 屏幕上出现哪一条，耳朵里听到的就是哪一条；队列里排队的那些**不播**，
+   * 等轮到它显示时再播（否则用户会听到一条屏幕上根本没显示的提醒）。
+   *
+   * 播报正文的**时刻前缀在这里拼**：`new Date()` 取的是「正在播的这一刻」，
+   * 而不是 `reminder.fireAt`。超时提醒会持续好几轮，用 `fireAt` 会念出一个
+   * 早已过去的时刻，与「现在几点」的诉求正好相反。
+   *
+   * ⚠️ 不 await：播报是副作用，念多久都不该拖住 tick（`tick` 是 1Hz 驱动的
+   * 同步决策点）。桥自身已保证失败静默（§4b.1）。
+   */
+  function present(reminder: ReminderMessage): void {
+    active.value = reminder;
+    if (bridge.capabilities.speech) {
+      void bridge.speak(speechText(reminder, new Date()));
+    }
+  }
+
+  /**
    * 入队弹窗：`active` 为空则直接显示，否则压入队列；同 key 不重复入队。
    *
    * 超时提醒额外挂一个自动关闭计时器（弹几秒 → 收起 → 下一轮再弹）。
@@ -115,7 +137,7 @@ export const useRemindersStore = defineStore('reminders', () => {
       return;
     }
     if (active.value === null) {
-      active.value = reminder;
+      present(reminder);
     } else {
       queue.value.push(reminder);
     }
@@ -355,10 +377,12 @@ export const useRemindersStore = defineStore('reminders', () => {
     started = false;
   }
 
-  /** 关闭当前弹窗；队列非空则显示下一条。 */
+  /** 关闭当前弹窗；队列非空则显示下一条（并同步播报下一条）。 */
   function dismiss(): void {
     if (queue.value.length > 0) {
-      active.value = queue.value.shift()!;
+      // 经 present 而非直接赋值：队列前进也是「一条新提醒开始显示」，
+      // 漏掉这里就会出现「看得见、听不到」的哑巴弹窗。
+      present(queue.value.shift()!);
     } else {
       active.value = null;
     }

@@ -11,7 +11,7 @@
     <key>CFBundleShortVersionString</key>
     <string>1.0</string>
     <key>CFBundleVersion</key>
-    <string>3</string>
+    <string>4</string>
     <key>CFBundleDisplayName</key>
     <string>不跑偏</string>
     <!-- 手表上做一句话创建时需要取得「出发地」，用于搜索附近的目的地并计算通勤时间。

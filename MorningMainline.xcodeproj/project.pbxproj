@@ -25,6 +25,7 @@
 		4C42688B3988D71CAB399BED /* SharedSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5707B08272527BAF8921D49 /* SharedSettingsStore.swift */; };
 		4C9A220D04177D68402749CF /* RoutineStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 685366F1FF3CFF057A7CB78A /* RoutineStore.swift */; };
 		573ABD70DABF60A88B296D35 /* MainlineWatchWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86208CD1A566ECA2411EAA66 /* MainlineWatchWidget.swift */; };
+		68F8A5F665427A5FFD18D438 /* SpeechAnnouncer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F0E7EACF7D37D1611569B09 /* SpeechAnnouncer.swift */; };
 		7E4F6E767A19806170D08D30 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17C822EEDDCBF74CAF04F044 /* ContentView.swift */; };
 		849828E257647E9E72DB3084 /* MainlineWidgetShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2A9EB9B94D439A095BD5A37 /* MainlineWidgetShared.swift */; };
 		88E9AEBE621A66433EF4B269 /* CloudSnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E9A2635C55F0B2920F75C7D /* CloudSnapshotStore.swift */; };
@@ -138,6 +139,7 @@
 		67AE0FA82E0007703E673C6C /* MainlineiOSWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainlineiOSWidgetBundle.swift; sourceTree = "<group>"; };
 		685366F1FF3CFF057A7CB78A /* RoutineStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutineStore.swift; sourceTree = "<group>"; };
 		6AB6CC70F649647AE9589AF3 /* RoutineParsingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutineParsingService.swift; sourceTree = "<group>"; };
+		6F0E7EACF7D37D1611569B09 /* SpeechAnnouncer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechAnnouncer.swift; sourceTree = "<group>"; };
 		6F33D018B01AF8A6882A36BE /* deadline-overdue.aiff */ = {isa = PBXFileReference; lastKnownFileType = audio.aiff; path = "deadline-overdue.aiff"; sourceTree = "<group>"; };
 		6F9961BEA5AB0C40814660E8 /* MorningMainline.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = MorningMainline.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		78E091D2AC33C30063D5EF5E /* ItinerarySplitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItinerarySplitter.swift; sourceTree = "<group>"; };
@@ -272,6 +274,7 @@
 				F0BC7E8AF711B8314D83B022 /* Assets.xcassets */,
 				17C822EEDDCBF74CAF04F044 /* ContentView.swift */,
 				81252AB16B5C74E922A67BF0 /* MorningMainlineApp.swift */,
+				6F0E7EACF7D37D1611569B09 /* SpeechAnnouncer.swift */,
 				EA65DCE4157E78B70E8C21F0 /* WebHost.swift */,
 				21BE4578456D8285055181FC /* Resources */,
 			);
@@ -540,6 +543,7 @@
 				D239D8636B4E20D9D4069501 /* RoutineParsingService.swift in Sources */,
 				4C9A220D04177D68402749CF /* RoutineStore.swift in Sources */,
 				BF3A68A9B0357BE913B151EE /* SharedSettingsStore.swift in Sources */,
+				68F8A5F665427A5FFD18D438 /* SpeechAnnouncer.swift in Sources */,
 				36734146BBDE916025F56395 /* WebHost.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

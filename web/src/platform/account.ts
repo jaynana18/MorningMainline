@@ -59,14 +59,20 @@ export function withAccountSync(bridge: PlatformBridge): PlatformBridge {
       if (!pending) {
         const remote = await accountRequest('/snapshot');
         if (!pending && remote.revision !== revision && remote.snapshot) {
-          revision = remote.revision;
-          current = JSON.stringify(remote.snapshot);
-          saveCache();
-          const snapshot = decodeSnapshot(current!);
-          // 核心按 updatedAt 判断是否接收远端；服务端版本是同步顺序的依据。
-          snapshot.updatedAt = new Date();
-          snapshot.originID = `cloud:${revision}`;
-          listeners.forEach(listener => listener(snapshot));
+          // ⚠️ 先解码、成功后才提交 revision：`decodeSnapshot` 可返回 null。
+          // 若按原写法先推进 revision 再解码，一次解码失败就会让
+          // 「remote.revision === revision」永久成立 → 这份远端数据再也不会被拉取。
+          const encoded = JSON.stringify(remote.snapshot);
+          const snapshot = decodeSnapshot(encoded);
+          if (snapshot) {
+            revision = remote.revision;
+            current = encoded;
+            saveCache();
+            // 核心按 updatedAt 判断是否接收远端；服务端版本是同步顺序的依据。
+            snapshot.updatedAt = new Date();
+            snapshot.originID = `cloud:${revision}`;
+            listeners.forEach(listener => listener(snapshot));
+          }
         }
       }
       account.status = pending ? '等待同步' : '已同步';

@@ -123,6 +123,14 @@ function detectBackgroundNotification(): boolean {
   );
 }
 
+/** 浏览器 TTS 能力探测。Node 测试环境（无 `window`）恒为 false。 */
+function detectSpeech(): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+  return typeof (window as { speechSynthesis?: unknown }).speechSynthesis !== 'undefined';
+}
+
 export interface BrowserBridgeOptions {
   /**
    * 可选的后端代理地址。**为空时 `parseWithModel` 一律返回 `null`**（§7：Key 绝不进前端）。
@@ -155,6 +163,7 @@ export class BrowserBridge implements PlatformBridge {
       backgroundNotification: detectBackgroundNotification(),
       modelParsing: this.modelProxyURL !== null,
       widget: false,
+      speech: detectSpeech(),
     };
   }
 
@@ -251,6 +260,35 @@ export class BrowserBridge implements PlatformBridge {
 
   async setForegroundReminderReady(): Promise<void> {
     // 浏览器宿主没有原生 willPresent；前台去重由本文件的可见性判断负责。
+  }
+
+  /**
+   * 浏览器宿主的语音播报：走 Web Speech API。
+   *
+   * 与 WebView 宿主的差别：这里**没有**原生 TTS 可托付，只能靠页面自己的能力。
+   * Chrome/Safari 都支持，但发声质量、是否要求用户手势、系统语音包是否装了中文，
+   * 全都不可控 —— 因此它只是「尽力而为」，失败一律静默（§4b.1：绝不可拖住提醒引擎）。
+   *
+   * 每次播报前先 `cancel()`：提醒是**此时的这一件事**，上一句念到一半也该让位；
+   * 排队会导致用户听到的内容与屏幕上显示的那条对不上。
+   */
+  async speak(text: string): Promise<void> {
+    if (text === '' || typeof window === 'undefined') {
+      return;
+    }
+    const synthesis = (window as { speechSynthesis?: SpeechSynthesis }).speechSynthesis;
+    if (!synthesis || typeof SpeechSynthesisUtterance === 'undefined') {
+      return;
+    }
+    try {
+      synthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      // 中文语音包名随系统而变，交给系统按 lang 自动挑，不硬编码 voice。
+      utterance.lang = 'zh-CN';
+      synthesis.speak(utterance);
+    } catch {
+      // 静默降级：播报失败不得影响主流程。
+    }
   }
 
   async parseWithModel(input: string): Promise<ParseResult | null> {

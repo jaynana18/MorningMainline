@@ -77,6 +77,8 @@ export class WebViewBridge implements PlatformBridge {
     backgroundNotification: true,
     modelParsing: true,
     widget: true,
+    // 原生 `AVSpeechSynthesizer` 负责念。与系统「播报通知」无关（那条只在锁屏生效）。
+    speech: true,
   };
 
   private readonly pending = new Map<string, PendingCall>();
@@ -329,6 +331,24 @@ export class WebViewBridge implements PlatformBridge {
       await this.call('notifications.foregroundReady', { ready });
     } catch (error) {
       this.warn('notifications.foregroundReady', error);
+    }
+  }
+
+  /**
+   * 交给原生念。**刻意不 await 结果细节** —— 播报是「发出即完成」的动作，
+   * 念多久不该拖住调用方；只保留超时/失败的可观测线索。
+   *
+   * 不复用 `fallback.speak`：WebView 宿主里页面的 `speechSynthesis` 与原生 TTS
+   * 会**同时出声**，变成双声。原生不可用时宁可这一条不念，也不叠加。
+   */
+  async speak(text: string): Promise<void> {
+    if (text === '') {
+      return;
+    }
+    try {
+      await this.call('speech.speak', { text });
+    } catch (error) {
+      this.warn('speech.speak', error);
     }
   }
 
