@@ -78,14 +78,6 @@ final class RoutineStore: ObservableObject {
 
     // MARK: - 跨设备设置
 
-    /// 写入高德 Key，落本机 App Group 并广播给对端（手表就是靠这一步拿到手机上的 Key）。
-    func setAmapKey(_ value: String) {
-        var next = SharedSettingsStore.updateAmapKey(value)
-        next.originID = deviceID
-        settings = next
-        connectivity.publish(next)
-    }
-
     /// 记住上次用的出行方式，让两端默认值一致。
     func setTravelMode(_ mode: TravelMode) {
         var next = SharedSettingsStore.updateTravelMode(mode)

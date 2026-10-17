@@ -51,7 +51,7 @@
           <p class="mm-hint">优先搜索出发地附近的同名地点，定位失败时按名称搜索。选中后显示地图并查询路程。</p>
           <div v-if="selectedPlace" style="margin-top: 12px">
             <p>{{ selectedPlace.name }} <span class="mm-hint">{{ selectedPlace.address }}</span></p>
-            <MapPreview :src="destinationMapURL(amapKey, selectedPlace.location)" :title="selectedPlace.name" />
+            <MapPreview :src="destinationMapURL(selectedPlace.location)" :title="selectedPlace.name" />
           </div>
           <div v-if="needsOrigin">
             <label>出发地名称<input v-model="originQuery" class="mm-input" placeholder="例如：青岛站" /></label>
@@ -186,7 +186,7 @@ import {
   type RoutineStep,
   type RoutineTemplate,
 } from '../stores/routine';
-import { DestinationSelectionRequired, OriginRequired, destinationMapURL, developerAmapKey, type CommuteDestination } from '../platform/commute';
+import { DestinationSelectionRequired, OriginRequired, destinationMapURL, type CommuteDestination } from '../platform/commute';
 import CommuteMap from './CommuteMap.vue';
 import MapPreview from './MapPreview.vue';
 import { iconNameForSymbol } from './session/helpers';
@@ -217,14 +217,6 @@ const travelMode = computed<TravelMode>({
   get: () => (store.settings.travelMode as TravelMode) || 'driving',
   set: (value: TravelMode) => { void store.saveSettings({ travelMode: value }); },
 });
-/**
- * 高德 Key 是**开发者配置**，只在构建期由 `.env` 注入，不进用户界面。
- *
- * 这里保留成 computed 只为让模板少写一层调用；它是**只读**的 ——
- * 没有 setter，也不再有「用户填 Key」这条路径。要换 Key 由开发者改 `web/.env.local`
- * 后重新构建（WebView 宿主下另经 `syncDeveloperKeyToNative()` 广播给原生/手表）。
- */
-const amapKey = computed<string>(() => developerAmapKey());
 const needsSecureLocation = !window.webkit?.messageHandlers?.mainline && !window.isSecureContext;
 const secureEntryURL = import.meta.env.DEV && import.meta.env.VITE_DEV_HTTPS_URL
   ? `${import.meta.env.VITE_DEV_HTTPS_URL.replace(/\/$/, '')}/${window.location.hash || '#/create'}`
@@ -251,7 +243,7 @@ async function searchOrigin(): Promise<void> {
   routeError.value = '';
   originCandidates.value = [];
   try {
-    await queryCommute(amapKey.value, originQuery.value, travelMode.value);
+    await queryCommute(originQuery.value, travelMode.value);
   } catch (error) {
     if (requestID !== routeRequest) return;
     if (error instanceof DestinationSelectionRequired) originCandidates.value = error.candidates;
@@ -308,7 +300,7 @@ async function lookupRoute(selectedDestination?: CommuteDestination): Promise<vo
   if (!selectedDestination) destinationCandidates.value = [];
   try {
     const previous = commuteItems.value[commuteItems.value.length - 1]?.route;
-    const result = await queryCommute(amapKey.value, requestedDestination, requestedMode, selectedDestination, previous?.location || manualOrigin.value || undefined);
+    const result = await queryCommute(requestedDestination, requestedMode, selectedDestination, previous?.location || manualOrigin.value || undefined);
     if (requestID !== routeRequest || destination.value !== requestedDestination || travelMode.value !== requestedMode || !hasCommute.value) return;
     const tasks = pendingStops.value[stopIndex.value].steps;
     if (requestID !== routeRequest || !destinationDialog.value) return;

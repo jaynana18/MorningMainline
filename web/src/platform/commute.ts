@@ -3,10 +3,81 @@ import { nativeRequest } from './webview';
 export type TravelMode = 'driving' | 'walking' | 'transit';
 export type CommuteRoute = CommuteInfo;
 export class OriginRequired extends Error {}
-export function destinationMapURL(key: string, location: string): string {
-  // 无 Key 时不拼一个注定 403 的坏 URL，直接返回空串让调用方不渲染图片。
-  if (!key.trim()) return '';
-  return `https://restapi.amap.com/v3/staticmap?${new URLSearchParams({ key: key.trim(), location, zoom: '15', size: '480*240', markers: `mid,0xe5484d,A:${location}` })}`;
+
+/**
+ * 高德请求的唯一出口：**服务端代理**。
+ *
+ * 🔴 为什么必须是代理而不是「构建期注入 Key」：`VITE_` 前缀的值会被原样打进
+ * `dist/assets/index-*.js`，线上任何人 `curl` 一下产物就能拿到 Key 去盗刷配额
+ * （本项目已实测复现，见 `server/account-server.mjs` 的代理段注释）。
+ * 现在 Key 只存在服务端进程环境变量里，浏览器 / 原生 / 手表都只访问同源的代理地址。
+ *
+ * 两条宿主通道共用同一个 URL 语义（`/api/commute/rest?path=...`）：
+ * - **WebView 宿主**：页面是 `file://`，同源 fetch 无处可去（`file://` 下 `/api/...`
+ *   会解析到文件系统根）→ 必须交原生代发，走 `commute.rest` 桥方法。
+ * - **浏览器宿主**：直接同源 `fetch`，由 Vite dev proxy / Nginx 转发到账号服务。
+ *
+ * 两条路径的**降级行为一致**：不可用时抛出带用户可读文案的 `Error`，
+ * 由调用方决定是提示还是跳过（不假装算出了结果）。
+ */
+async function amapRest(path: string, params: Record<string, string>): Promise<Record<string, any>> {
+  const query = new URLSearchParams({ path, ...params });
+  let body: any;
+  if (isNativeHost()) {
+    // 原生代发：不经 JS 的 fetch，绕开 `file://` 的同源限制。
+    body = await nativeRequest('commute.rest', { query: query.toString() }, 20000) as Record<string, any>;
+  } else {
+    const response = await fetch(`${commuteBaseURL()}/rest?${query}`, { signal: AbortSignal.timeout(15000) });
+    if (!response.ok) {
+      // 429/503 是代理自己的话术（限流 / 未配置 Key），比「路线服务不可用」更准确。
+      const detail = await response.json().catch(() => null) as { error?: string } | null;
+      throw new Error(detail?.error ?? '路线服务暂时不可用，请稍后重试。');
+    }
+    body = await response.json();
+  }
+  if (body?.status !== '1') {
+    const stage = path.startsWith('place/') ? '目的地搜索' : path.startsWith('direction/') ? '路线查询' : path === 'geocode/regeo' ? '当前位置解析' : '坐标转换';
+    throw new Error(`高德${stage}失败：${body?.info ?? '请稍后重试'}（${body?.infocode ?? '未知错误码'}）`);
+  }
+  return body;
+}
+
+/** 代理根地址（不含端点）。浏览器宿主下与页面同源，由 dev proxy / Nginx 转发。 */
+function commuteBaseURL(): string {
+  return import.meta.env.VITE_COMMUTE_API_URL || '/api/commute';
+}
+
+/**
+ * 静态地图的代理 URL。
+ *
+ * ⚠️ 静态地图只能交给 `<img src>`，没法走桥（`<img>` 不认 Promise），所以这里
+ * **不能**像 `amapRest` 那样在 WebView 宿主下借原生代发。而打包版页面是 `file://`，
+ * 相对路径 `/api/commute/...` 会解析到文件系统根 → 图片必然加载失败。
+ * 因此在 WebView 宿主下直接拼**固定 HTTPS 域名**（与 `WebHost.swift` 里
+ * `account.request` / `commute.rest` 用的是同一个，不是秘密）。
+ *
+ * 这条请求**不需要任何凭据**：Key 在服务端，静态地图代理端点对任何人都只回一张图。
+ */
+const COMMUTE_ORIGIN = 'https://47.104.95.146/api/commute';
+
+function isNativeHost(): boolean {
+  return typeof window !== 'undefined' && !!window.webkit?.messageHandlers?.mainline;
+}
+
+function staticMapURL(params: URLSearchParams): string {
+  // 浏览器宿主：同源相对路径（Vite dev proxy / Nginx 反代成品都能用）。
+  return isNativeHost() ? `${COMMUTE_ORIGIN}/staticmap?${params}` : `/api/commute/staticmap?${params}`;
+}
+
+/** 静态地图统一尺寸。两处调用方（目的地预览 / 路线缩略图）保持一致，避免代理端出现多种缓存键。 */
+const MAP_SIZE = '480*240';
+
+export function destinationMapURL(location: string): string {
+  // 坐标为空的调用方不该拼一个必然失败的 URL —— 直接返回空串让 `MapPreview` 不渲染图片。
+  if (!location.trim()) return '';
+  return staticMapURL(new URLSearchParams({
+    location, zoom: '15', size: MAP_SIZE, markers: `mid,0xe5484d,A:${location}`,
+  }));
 }
 export interface CommuteDestination {
   id: string;
@@ -22,32 +93,18 @@ export class DestinationSelectionRequired extends Error {
   }
 }
 /**
- * 构建期注入的高德 Web 服务 Key。
+ * 构建路线缩略图的代理 URL。
  *
- * ⚠️ 这是**开发者配置**，不是用户设置 —— 所以它不出现在个人中心界面里，
- * 用户换设备/换账号也不需要重新填。要换 Key 由开发者改 `.env` 后重新构建。
- *
- * ⚠️ `VITE_` 前缀意味着这个值会被**打包进 JS 产物**（`dist/assets/index-*.js`）。
- * 仅适合本地开发与自托管场景；若 web/dist 会被公开部署，请把
- * `web/.env.local` 里这一行删掉 —— 届时本函数返回空串，通勤功能自动降级为
- * 「未配置」提示，而不是把 Key 送到公开网络上。
+ * 路线数据（起终点 + 折线）本来就是用户自己的行程，但**拼 URL 这件事不再需要 Key**
+ * ——这也是方案 B 顺带的好处：静态地图 URL 从此可以安全地出现在任何地方。
  */
-export function developerAmapKey(): string {
-  return ((import.meta.env.VITE_AMAP_WEB_SERVICE_KEY as string | undefined) ?? '').trim();
-}
-
-/** 最近一次查询用过的 Key，供 `commuteMapURL` 拼静态地图（它拿不到调用方参数）。 */
-let currentKey = developerAmapKey();
-let cachedOrigin: { location: string; time: number } | null = null;
-
 export function commuteMapURL(route: CommuteInfo): string {
-  if (!currentKey) return '';
   const params = new URLSearchParams({
-    key: currentKey, size: '480*240',
+    size: MAP_SIZE,
     markers: `mid,0x22a06b,起:${route.origin}|mid,0xe5484d,终:${route.location}`,
     ...(route.polyline ? { paths: `5,0x367bf5,1,,:${route.polyline}` } : {}),
   });
-  return `https://restapi.amap.com/v3/staticmap?${params}`;
+  return staticMapURL(params);
 }
 
 export function commuteNavigationURL(route: CommuteInfo): string {
@@ -58,28 +115,19 @@ export function commuteNavigationURL(route: CommuteInfo): string {
   })}`;
 }
 
-/** 用户主动点击查询后才申请定位并将起终点发送给高德。 */
-export async function queryCommute(key: string, address: string, mode: TravelMode, selectedDestination?: CommuteDestination, originLocation?: string): Promise<CommuteRoute> {
-  // 文案刻意不再指向「去设置里填」—— Key 是开发者配置，用户界面没有这个入口。
-  if (!key.trim()) throw new Error('当前版本未内置地图服务，暂时无法查询通勤。');
-  currentKey = key.trim();
+/** 出发地 60 秒缓存。定位是昂贵操作，同一分钟内多次算路复用同一次结果。 */
+let cachedOrigin: { location: string; time: number } | null = null;
+
+/** 用户主动点击查询后才申请定位并将起终点交给服务端代理转发给高德。 */
+export async function queryCommute(address: string, mode: TravelMode, selectedDestination?: CommuteDestination, originLocation?: string): Promise<CommuteRoute> {
   if (!address.trim()) throw new Error('请填写目的地。');
-  const request = async (path: string, params: Record<string, string>) => {
-    const response = await fetch(`https://restapi.amap.com/v3/${path}?${new URLSearchParams({ key: key.trim(), ...params })}`, { signal: AbortSignal.timeout(15000) });
-    if (!response.ok) throw new Error('路线服务暂时不可用，请稍后重试。');
-    const body = await response.json();
-    if (body.status !== '1') {
-      const stage = path.startsWith('place/') ? '目的地搜索' : path.startsWith('direction/') ? '路线查询' : path === 'geocode/regeo' ? '当前位置解析' : '坐标转换';
-      throw new Error(`高德${stage}失败：${body.info ?? '请检查 Key 和服务权限'}（${body.infocode ?? '未知错误码'}）`);
-    }
-    return body;
-  };
+  const request = amapRest;
   let origin = originLocation ?? '';
   if (!origin && cachedOrigin && Date.now() - cachedOrigin.time < 60000) origin = cachedOrigin.location;
   if (!origin) {
     try {
-    const isNative = !!window.webkit?.messageHandlers?.mainline;
-    if (!isNative && (!window.isSecureContext || !navigator.geolocation)) throw new OriginRequired('无法自动定位，请按名称选择出发地。');
+    const isNative = isNativeHost();
+    if (!isNative && (typeof window === 'undefined' || !window.isSecureContext || !navigator.geolocation)) throw new OriginRequired('无法自动定位，请按名称选择出发地。');
     const coords = isNative ? await nativeRequest('location.current') as { longitude: number; latitude: number } : (await new Promise<GeolocationPosition>((resolve, reject) => {
       navigator.geolocation.getCurrentPosition(resolve, () => reject(new OriginRequired('没有获取到当前位置，请按名称选择出发地。')), { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
     })).coords;

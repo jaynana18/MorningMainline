@@ -1,11 +1,12 @@
 /**
  * 「用户习惯」三项（出行方式 / 语音播报 / 超时提醒间隔）随账号云同步的守门测试。
  *
- * 为什么值得单测：这套逻辑最危险的一条是 **`amapKey` 永远不被云端覆盖** ——
- * 高德 Key 是开发者配置（构建期 env），服务端根本不存它；一旦哪天有人把
- * `pullPreferences` 写成整体替换，后果是「用户换一次账号，手机上的 Key 被清空、
- * 手表随即失去 Key」，而且**界面上没有任何地方能看出原因**（那个输入框已经删了）。
- * 属于典型的「静默失效」，必须用断言钉住。
+ * 这套逻辑最危险的一条是 **推送内容必须只含这三项** —— 曾经设置结构里还有
+ * 高德 Key（构建期 env 注入的开发者配置），一旦有人把它顺手一起推到云端或
+ * 从云端整体拉回来覆盖本机，就会出现「凭据跟着账号漂」/「换账号清空 Key」，
+ * 且**界面上没有任何地方能看出原因**（那个输入框早已删除）。
+ * Key 现已改为服务端代理、客户端完全不持有，但「推送只含白名单三项」这条约束
+ * 仍然值得钉住 —— 以后再加字段时，默认应该是「不加」而不是「一起同步」。
  *
  * 环境说明：`withAccountSync` 在 `typeof window === 'undefined'` 时直接返回原桥
  * （给 SSR / 无宿主环境兜底），所以这里手工造一个最小 window + storage。
@@ -71,9 +72,8 @@ afterEach(() => {
 
 function bridgeWithSettings(settings: Partial<Record<string, unknown>> = {}): MockBridge {
   const bridge = createMockBridge();
-  // 模拟 App Group 里已有一份设置（含开发者注入的 Key）。
+  // 模拟 App Group 里已有一份设置。
   void bridge.writeSettings({
-    amapKey: 'developer-key',
     travelMode: 'driving',
     speechEnabled: true,
     overduePolicy: { ...DEFAULT_OVERDUE_POLICY },
@@ -107,14 +107,12 @@ describe('withAccountSync — 偏好（用户习惯）随账号同步', () => {
     expect(settings.overduePolicy).toEqual({ earlyInterval: 3, switchAfter: 20, lateInterval: 1 });
   });
 
-  it('🔴 云端偏好绝不覆盖本机的高德 Key（开发者配置不跟账号走）', async () => {
-    remote = {
-      updatedAt: 100,
-      preferences: { travelMode: 'transit', speechEnabled: false, overduePolicy: { ...DEFAULT_OVERDUE_POLICY } },
-    };
-    const bridge = withAccountSync(bridgeWithSettings({ amapKey: 'developer-key' }));
-    const settings = await bridge.readSettings();
-    expect(settings.amapKey).toBe('developer-key');
+  it('🔴 推送内容只含白名单三项（凭据类字段绝不进云端）', async () => {
+    // 即使把一份「多余的字段」塞进本机设置，推送也必须把它滤掉。
+    const bridge = withAccountSync(bridgeWithSettings({ travelMode: 'transit', leakedSecret: 'should-not-sync' }));
+    await bridge.readSettings();
+    await vi.waitFor(() => expect(putCalls).toHaveLength(1));
+    expect(Object.keys(putCalls[0]).sort()).toEqual(['overduePolicy', 'speechEnabled', 'travelMode']);
   });
 
   it('远端为空（新账号首次登录）→ 不覆盖本机，并把本机现状推上去', async () => {
@@ -122,16 +120,14 @@ describe('withAccountSync — 偏好（用户习惯）随账号同步', () => {
     const settings = await bridge.readSettings();
     expect(settings.travelMode).toBe('walking');
     expect(settings.speechEnabled).toBe(false);
-    // 推上去了，且**不含** amapKey。
+    // 推上去了。
     await vi.waitFor(() => expect(putCalls).toHaveLength(1));
     expect(putCalls[0]).toMatchObject({ travelMode: 'walking', speechEnabled: false });
-    expect(putCalls[0]).not.toHaveProperty('amapKey');
   });
 
-  it('writeSettings：本机先落盘（手表拿 Key 的通道不能被网络拖慢），再推云端且不含 Key', async () => {
+  it('writeSettings：本机先落盘（对端设备拿设置的通道不能被网络拖慢），再推云端', async () => {
     const bridge = withAccountSync(bridgeWithSettings());
     await bridge.writeSettings({
-      amapKey: 'developer-key',
       travelMode: 'walking',
       speechEnabled: true,
       overduePolicy: { ...DEFAULT_OVERDUE_POLICY },
@@ -139,7 +135,6 @@ describe('withAccountSync — 偏好（用户习惯）随账号同步', () => {
     // 本机写入是同步完成的。
     expect((bridge as unknown as MockBridge).writeSettingsCalls.length).toBeGreaterThan(0);
     await vi.waitFor(() => expect(putCalls).toHaveLength(1));
-    expect(putCalls[0]).not.toHaveProperty('amapKey');
     expect(putCalls[0]).toMatchObject({ travelMode: 'walking' });
   });
 

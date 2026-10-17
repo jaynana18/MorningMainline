@@ -24,6 +24,14 @@ export default defineConfig(({ mode }) => {
         changeOrigin: true,
         secure: true,
       },
+      // 地图请求也走服务端代理（Key 只在服务器上，前端产物里不再有凭据）。
+      // ⚠️ 这条**只对开发服务器生效**；生产形态下 WebView 宿主走 `commute.rest`
+      // 原生代发，浏览器宿主走 Nginx 反代（见 server/ACCOUNT_SETUP.md）。
+      '/api/commute/': {
+        target: 'https://47.104.95.146',
+        changeOrigin: true,
+        secure: true,
+      },
       '/api/model/': {
         target: 'https://47.104.95.146',
         changeOrigin: true,

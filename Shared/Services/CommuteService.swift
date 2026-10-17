@@ -48,8 +48,6 @@ struct CommuteDestination: Identifiable, Hashable, Sendable {
 /// 通勤查询失败。文案与 `web/src/platform/commute.ts` 逐条对应，
 /// 保证同一个错误在手机和手表上说同一句话。
 enum CommuteError: LocalizedError {
-    /// 没有可用的高德 Key（开发者配置未注入 / 尚未从手机同步到手表）。
-    case missingKey
     /// 没填目的地。
     case missingDestination
     /// 出发地拿不到（定位失败 / 被拒 / 超时），无法算路。
@@ -61,7 +59,6 @@ enum CommuteError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .missingKey: "地图服务还没就绪，暂时无法查询通勤。"
         case .missingDestination: "请填写目的地。"
         case .originRequired(let message): message
         case .selectionRequired(_, let message): message
@@ -86,6 +83,12 @@ enum CommuteError: LocalizedError {
 /// - **不生成地图 URL**。Watch 不展示地图，静态地图接口对它没有意义；
 ///   iPhone 侧的地图仍由 web 层的 `commuteMapURL` 负责。
 /// - 候选排序沿用同一套 Haversine 直线距离，但文案不变 —— 直线距离不能冒充实际路程。
+///
+/// 🔴 **本服务不持有、也不需要高德 Key**：所有请求打到服务端代理
+/// `https://47.104.95.146/api/commute/rest?path=...`，Key 只在服务器进程环境变量里。
+/// 之前这条链路上 Key 要经 App Group + WCSession 从手机同步到手表，
+/// 属于「凭据在客户端之间搬运」—— 任何一个环节落盘或进产物就等于泄露
+/// （本项目实测过后者）。现在客户端只发送**业务参数**，整条链路上没有凭据可泄。
 actor CommuteService {
     static let shared = CommuteService()
 
@@ -96,7 +99,6 @@ actor CommuteService {
     /// 查询通勤路线。
     ///
     /// - Parameters:
-    ///   - key: 高德 Web 服务 Key（不持久化）。
     ///   - address: 目的地名称或地址。
     ///   - mode: 出行方式。
     ///   - selectedDestination: 已选定的具体地点。**传了它就跳过选点、直接按坐标算路** ——
@@ -104,19 +106,15 @@ actor CommuteService {
     ///   - originLocation: 已知出发地坐标（如上一段通勤的终点），传了就跳过定位。
     /// - Throws: `CommuteError`。其中 `.selectionRequired` 需要 UI 让用户挑地点后重试。
     func queryCommute(
-        key rawKey: String,
         address: String,
         mode: TravelMode,
         selectedDestination: CommuteDestination? = nil,
         originLocation: String? = nil
     ) async throws -> CommuteInfo {
-        let key = rawKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !key.isEmpty else { throw CommuteError.missingKey }
         let query = address.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { throw CommuteError.missingDestination }
 
         let origin = try await resolveOrigin(
-            key: key,
             selectedDestination: selectedDestination,
             originLocation: originLocation
         )
@@ -124,12 +122,12 @@ actor CommuteService {
         // 城市码用于公交方案与按名称搜索；解析失败只是降级，不该中断整个流程。
         var city = ""
         if !origin.isEmpty,
-           let start = try? await request("geocode/regeo", params: ["location": origin], key: key) {
+           let start = try? await request("geocode/regeo", params: ["location": origin]) {
             city = Self.cityCode(from: start)
         }
 
         guard let destination = selectedDestination else {
-            let outcome = try await searchDestinations(query: query, origin: origin, city: city, key: key)
+            let outcome = try await searchDestinations(query: query, origin: origin, city: city)
             guard !outcome.candidates.isEmpty else {
                 throw CommuteError.failed("没有找到可选择的地点。请返回修改原句，补充城市或门店名称后再生成。")
             }
@@ -148,8 +146,7 @@ actor CommuteService {
             origin: origin,
             destination: destination,
             city: city,
-            mode: mode,
-            key: key
+            mode: mode
         )
     }
 
@@ -160,7 +157,6 @@ actor CommuteService {
     /// 定位失败时是否中断，取决于此刻在做什么：**正在算路就必须有出发地**（抛错），
     /// 而只是搜地点则可以先按名称搜下去 —— 这一点与 web 版行为一致。
     private func resolveOrigin(
-        key: String,
         selectedDestination: CommuteDestination?,
         originLocation: String?
     ) async throws -> String {
@@ -176,8 +172,7 @@ actor CommuteService {
             let gps = try await LocationProvider.shared.gpsString()
             let converted = try await request(
                 "assistant/coordinate/convert",
-                params: ["locations": gps, "coordsys": "gps"],
-                key: key
+                params: ["locations": gps, "coordsys": "gps"]
             )
             guard let location = converted["locations"] as? String, !location.isEmpty else {
                 throw CommuteError.originRequired("无法获取当前位置，请选择出发地。")
@@ -198,8 +193,7 @@ actor CommuteService {
     private func searchDestinations(
         query: String,
         origin: String,
-        city: String,
-        key: String
+        city: String
     ) async throws -> (candidates: [CommuteDestination], usedNearbyFallback: Bool) {
         // 地标、商场简称走 POI 搜索，不当作结构化门牌地址；不擅自选择首个结果。
         var pois: [[String: Any]] = []
@@ -209,16 +203,14 @@ actor CommuteService {
                 params: [
                     "keywords": query, "location": origin, "radius": "10000",
                     "sortrule": "distance", "offset": "20", "page": "1", "extensions": "base"
-                ],
-                key: key
+                ]
             )
             pois = around["pois"] as? [[String: Any]] ?? []
         }
         if pois.isEmpty {
             let text = try await request(
                 "place/text",
-                params: ["keywords": query, "city": city, "offset": "20", "page": "1", "extensions": "base"],
-                key: key
+                params: ["keywords": query, "city": city, "offset": "20", "page": "1", "extensions": "base"]
             )
             pois = text["pois"] as? [[String: Any]] ?? []
         }
@@ -230,8 +222,7 @@ actor CommuteService {
                 params: [
                     "location": origin, "radius": "3000",
                     "sortrule": "distance", "offset": "20", "page": "1", "extensions": "base"
-                ],
-                key: key
+                ]
             )
             pois = nearby["pois"] as? [[String: Any]] ?? []
         }
@@ -270,8 +261,7 @@ actor CommuteService {
         origin: String,
         destination: CommuteDestination,
         city: String,
-        mode: TravelMode,
-        key: String
+        mode: TravelMode
     ) async throws -> CommuteInfo {
         var params: [String: String] = ["origin": origin, "destination": destination.location]
         if mode == .transit {
@@ -280,8 +270,7 @@ actor CommuteService {
         }
         let body = try await request(
             mode == .transit ? "direction/transit/integrated" : "direction/\(mode.rawValue)",
-            params: params,
-            key: key
+            params: params
         )
 
         let route = body["route"] as? [String: Any]
@@ -323,15 +312,19 @@ actor CommuteService {
         )
     }
 
-    // MARK: - HTTP
+    // MARK: - HTTP（走服务端代理）
+
+    /// 与服务端代理约定的固定入口。与 `WebHost.requestAccount` 用的是同一个域名 ——
+    /// 账号服务与地图代理由同一个进程提供，部署上也在一起。
+    static let proxyBase = "https://47.104.95.146/api/commute/rest"
 
     private func request(
         _ path: String,
-        params: [String: String],
-        key: String
+        params: [String: String]
     ) async throws -> [String: Any] {
-        var components = URLComponents(string: "https://restapi.amap.com/v3/\(path)")
-        components?.queryItems = [URLQueryItem(name: "key", value: key)]
+        var components = URLComponents(string: Self.proxyBase)
+        // `path` 是高德内部路径，代理端做**精确白名单**校验；客户端不参与任何凭据拼接。
+        components?.queryItems = [URLQueryItem(name: "path", value: path)]
             + params.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) }
         guard let url = components?.url else {
             throw CommuteError.failed("路线服务地址无效。")
@@ -347,8 +340,13 @@ actor CommuteService {
         } catch {
             throw CommuteError.failed("路线服务暂时不可用，请稍后重试。")
         }
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+        guard let http = response as? HTTPURLResponse else {
             throw CommuteError.failed("路线服务暂时不可用，请稍后重试。")
+        }
+        // 代理自己的话术（限流 / 未配置 Key / 上游失败）比「暂时不可用」更具体，直接用它的。
+        guard (200..<300).contains(http.statusCode) else {
+            let detail = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            throw CommuteError.failed(detail?["error"] as? String ?? "路线服务暂时不可用，请稍后重试。")
         }
         guard let body = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
             throw CommuteError.failed("路线服务返回了无法解析的数据。")
@@ -372,7 +370,7 @@ actor CommuteService {
         } else {
             stage = "坐标转换"
         }
-        let info = body["info"] as? String ?? "请检查 Key 和服务权限"
+        let info = body["info"] as? String ?? "请稍后重试"
         let code = body["infocode"] as? String ?? "未知错误码"
         return "高德\(stage)失败：\(info)（\(code)）"
     }

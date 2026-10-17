@@ -68,13 +68,12 @@ export interface NotificationOpenedPayload {
 /**
  * 跨设备共用设置（`settings.read` / `settings.write`）。
  *
- * 高德 Key 必须存在这里而不是 localStorage：Apple Watch 是独立容器，
- * 只有经原生写入 App Group 再走 WCSession，手表上的「一句话创建」才拿得到 Key。
- * 浏览器宿主没有这段通道，读写都降级为「仅本页有效」。
+ * 🔴 **刻意不含高德 Key**。地图请求全部经服务端代理（见 `platform/commute.ts`
+ * 与 `server/account-server.mjs`），Key 只存在服务端进程环境变量里 ——
+ * 任何进入客户端的凭据，编译进包就等于公开（曾被 `curl` 产物验证过）。
+ * 本结构现在只承载「用户自定义行为」三项，它们同时也是账号云同步的内容。
  */
 export interface SharedSettings {
-  /** 高德 Web 服务 Key。空串表示未配置。 */
-  amapKey: string;
   /** 出行方式：`driving` | `walking` | `transit`。 */
   travelMode: string;
   /**
@@ -98,7 +97,6 @@ export interface SharedSettings {
 
 /** 未配置时的空设置。浏览器宿主的回落值。 */
 export const EMPTY_SHARED_SETTINGS: SharedSettings = {
-  amapKey: '',
   travelMode: 'driving',
   // 默认开：用户装完就该听到播报，而不是先去设置里找开关。
   speechEnabled: true,
@@ -119,9 +117,9 @@ export interface PlatformBridge {
   readSnapshot(): Promise<RoutineSnapshot | null>;
   writeSnapshot(snapshot: RoutineSnapshot): Promise<void>;
 
-  /** 读取跨设备共用设置（高德 Key / 出行方式）。无能力时返回 `EMPTY_SHARED_SETTINGS`。 */
+  /** 读取跨设备共用设置（出行方式 / 播报开关 / 超时策略）。无能力时返回 `EMPTY_SHARED_SETTINGS`。 */
   readSettings(): Promise<SharedSettings>;
-  /** 写入并广播给配对设备（手表靠这一步拿到 Key）。无能力时静默 no-op。 */
+  /** 写入并广播给配对设备。无能力时静默 no-op。 */
   writeSettings(settings: SharedSettings): Promise<void>;
 
   requestNotificationAuthorization(): Promise<boolean>;

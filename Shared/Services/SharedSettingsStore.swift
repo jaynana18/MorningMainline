@@ -93,17 +93,18 @@ struct OverduePolicy: Codable, Hashable, Sendable {
     }
 }
 
-/// 需要跨设备共用的轻量设置（高德 Web 服务 Key、出行方式、播报开关、超时提醒间隔）。
+/// 需要跨设备共用的轻量设置（出行方式、播报开关、超时提醒间隔）。
 ///
 /// **为什么不能只靠 App Group**：App Group 解决的是「同一设备内 App 与其扩展共享容器」
 /// （iPhone App ↔ iOS Widget、Watch App ↔ 表盘复杂功能）。iPhone 与 Watch 是两台设备、
 /// 两个独立容器，即便 App Group 标识符完全相同也读不到对方的数据。
 /// 因此本结构的同步路径是：iPhone 写入 App Group → 经 `ConnectivityService`（WCSession）
 /// 送到手表 → 手表写入**自己设备上**的 App Group，供手表 App 与表盘复杂功能共用。
+///
+/// 🔴 **结构里没有高德 Key**：地图请求全部经服务端代理（`CommuteService.proxyBase`），
+/// Key 只在服务器进程环境变量里。曾经它在这里、经 WCSession 跨设备搬运，
+/// 结果就是「凭据在客户端之间流动」——任何一环落盘/进产物即泄露。
 struct MainlineSettings: Codable, Hashable, Sendable {
-    /// 高德 Web 服务 Key。与任务数据分离存放，**不进 RoutineSnapshot** ——
-    /// 快照会经由 iCloud/WCSession 多处落盘，而 Key 是凭据，不该跟着业务数据到处飘。
-    var amapKey: String
     /// 上次使用的出行方式。手表与手机保持一致，省得每端各选一次。
     var travelMode: String
     /// App 内语音播报开关，默认开。关掉只影响「念不念」，弹窗照常显示。
@@ -119,13 +120,11 @@ struct MainlineSettings: Codable, Hashable, Sendable {
     var originID: UUID?
 
     init(
-        amapKey: String = "",
         travelMode: String = TravelMode.driving.rawValue,
         speechEnabled: Bool = true,
         overduePolicy: OverduePolicy = OverduePolicy(),
         originID: UUID? = nil
     ) {
-        self.amapKey = amapKey
         self.travelMode = travelMode
         self.speechEnabled = speechEnabled
         self.overduePolicy = overduePolicy
@@ -135,20 +134,19 @@ struct MainlineSettings: Codable, Hashable, Sendable {
     /// 🔴 手写解码，**必须**如此：`speechEnabled` 是后加的字段，而 App Group / WCSession
     /// 里可能还躺着旧版本写下的数据。`JSONDecoder` 对「非可选字段缺失」会**整体抛错**，
     /// 那样 `SharedSettingsStore.current` 的 `try?` 会走到 `catch` 分支、返回一份全新的
-    /// 默认设置 —— 用户填好的高德 Key 会**静默丢失**，且只表现为「怎么又要重填一次」。
+    /// 默认设置 —— 用户配好的播报/提醒节奏会**静默丢失**。
     ///
     /// 用 `decodeIfPresent` 逐字段兜底：缺失的键取默认值，其余字段照常还原。
     /// 对端是旧版本 App 时（WCSession 推来的设置同样没有新键）也靠这里保住兼容。
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        amapKey = try container.decodeIfPresent(String.self, forKey: .amapKey) ?? ""
         travelMode = try container.decodeIfPresent(String.self, forKey: .travelMode)
             ?? TravelMode.driving.rawValue
         // 旧数据没有这个键 → 取 true（默认开），而不是 false。
         speechEnabled = try container.decodeIfPresent(Bool.self, forKey: .speechEnabled) ?? true
         // ⚠️ 这里必须包 `try?`：`OverduePolicy` 是嵌套结构，若它内部出现类型不符
         // （对端是未来版本、塞了字符串之类），`decodeIfPresent` 会**抛错**，
-        // 而那一抛会把整份 `MainlineSettings` 一起带走 → 用户的高德 Key 静默丢失。
+        // 而那一抛会把整份 `MainlineSettings` 一起带走 → 其余设置静默丢失。
         // 包成 `try?` 后退化成「这一项回落默认」，代价可控。
         overduePolicy = (try? container.decodeIfPresent(OverduePolicy.self, forKey: .overduePolicy))
             ?? OverduePolicy()
@@ -158,11 +156,10 @@ struct MainlineSettings: Codable, Hashable, Sendable {
     /// 显式声明，与手写的 `init(from:)` 配套。键名即落盘 JSON 的键名，
     /// **改动会破坏已存数据的兼容性**，不要重命名。
     private enum CodingKeys: String, CodingKey {
-        case amapKey, travelMode, speechEnabled, overduePolicy, originID
+        case travelMode, speechEnabled, overduePolicy, originID
     }
 
     var mode: TravelMode { TravelMode(rawValue: travelMode) ?? .driving }
-    var hasKey: Bool { !amapKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 }
 
 /// 本机（当前设备）的共享设置存取。落在 App Group 容器的 UserDefaults 里，
@@ -186,15 +183,6 @@ enum SharedSettingsStore {
         }
     }
 
-    /// 只改高德 Key，保留其余字段。返回更新后的完整设置，便于直接广播出去。
-    @discardableResult
-    static func updateAmapKey(_ value: String) -> MainlineSettings {
-        var settings = current
-        settings.amapKey = value
-        current = settings
-        return settings
-    }
-
     /// 只改出行方式，保留其余字段。
     @discardableResult
     static func updateTravelMode(_ mode: TravelMode) -> MainlineSettings {
@@ -204,7 +192,7 @@ enum SharedSettingsStore {
         return settings
     }
 
-    /// 只改播报开关，保留其余字段（尤其是高德 Key）。
+    /// 只改播报开关，保留其余字段。
     @discardableResult
     static func updateSpeechEnabled(_ enabled: Bool) -> MainlineSettings {
         var settings = current

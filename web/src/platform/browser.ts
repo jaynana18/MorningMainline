@@ -195,9 +195,11 @@ export class BrowserBridge implements PlatformBridge {
    * 浏览器宿主的设置读写。
    *
    * 与 WebView 宿主的**语义差异必须说清**：浏览器里没有 Apple Watch 可同步，
-   * 也没有 App Group 可落 —— 这里的 Key 只存在本页存储里，仅本页有效。
-   * 换句话说，浏览器宿主下「手机上填一次、手表就能用」这件事**物理上做不到**，
-   * 因此这里不做任何假装：读得到就读，读不到就空。
+   * 也没有 App Group 可落 —— 这里的设置只存在本页存储里，仅本页有效。
+   * 换句话说，浏览器宿主下「手机上改一次、手表就能用」这件事**物理上做不到**。
+   *
+   * ⚠️ 这里**没有地图 Key**，也不需要：地图走同源 `/api/commute/` 代理，
+   * Key 只在服务端。（曾经这里存 Key，且因为 `VITE_` 前缀被公开到线上产物里。）
    */
   async readSettings(): Promise<SharedSettings> {
     const raw = await this.store.get(SETTINGS_KEY);
@@ -207,7 +209,6 @@ export class BrowserBridge implements PlatformBridge {
     try {
       const parsed = JSON.parse(raw) as Partial<SharedSettings>;
       return {
-        amapKey: typeof parsed.amapKey === 'string' ? parsed.amapKey : '',
         travelMode: typeof parsed.travelMode === 'string' ? parsed.travelMode : 'driving',
         // 字段缺失（旧版本写下的数据）时回落默认开，而不是当成 false ——
         // `boolean` 用 `!== false` 而不是 `=== true`，正是为了这一步。

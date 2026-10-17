@@ -7,10 +7,6 @@ import { nativeRequest } from './webview';
 /**
  * 「用户习惯」三项：出行方式 / 语音播报 / 超时提醒间隔 —— 跟账号走，跨设备生效。
  *
- * 🔴 **刻意不含高德 Key**：那是**开发者配置**（构建期 `web/.env.local` 注入，
- * 全用户同一份），不是用户数据。把它跟账号同步会让「换账号」这种无关动作
- * 把 Key 带着走，也会让浏览器宿主的产物里多一份不该公开的凭据。
- *
  * 与快照同步的关键差别：**不做乐观锁**。偏好冲突的代价只是某一项被覆盖，
  * 而 revision 冲突会逼用户处理一次 409 —— 为「提醒间隔差 1 分钟」弹冲突框不值。
  * 故 PUT 直接覆盖，`updatedAt` 由**服务端**打（用客户端时钟会在设备时钟不准时乱序）。
@@ -151,10 +147,7 @@ export function withAccountSync(bridge: PlatformBridge): PlatformBridge {
   /**
    * 取远端偏好并按字段覆盖到本机设置上。
    *
-   * 🔴 只有 `travelMode` / `speechEnabled` / `overduePolicy` 三项以云端为准，
-   * `amapKey` **永远保留本机值** —— 它是开发者配置，服务端根本不存它。
-   * 若这里整体替换，换一次账号就会把 Key 清空。
-   *
+   * 只有 `travelMode` / `speechEnabled` / `overduePolicy` 三项以云端为准。
    * 远端为空（新账号第一次）时不覆盖，由调用方把本机现状推上去作为初始值 ——
    * 否则「老用户第一次登录」会看到自己的设置被重置成默认值。
    */
@@ -173,8 +166,6 @@ export function withAccountSync(bridge: PlatformBridge): PlatformBridge {
         ...(typeof preferences.travelMode === 'string' ? { travelMode: preferences.travelMode } : {}),
         ...(typeof preferences.speechEnabled === 'boolean' ? { speechEnabled: preferences.speechEnabled } : {}),
         ...(preferences.overduePolicy ? { overduePolicy: preferences.overduePolicy } : {}),
-        // 显式重申：Key 不来自云端。
-        amapKey: local.amapKey,
       };
       localStorage.setItem(preferencesKey(), JSON.stringify(pickPreferences(merged)));
       return merged;
@@ -184,7 +175,7 @@ export function withAccountSync(bridge: PlatformBridge): PlatformBridge {
         // 离线时用上次同步的缓存，至少要跟「上次在线时」一致，而不是退回默认值。
         try {
           const cached = JSON.parse(localStorage.getItem(preferencesKey()) || 'null');
-          if (cached) return { ...local, ...cached, amapKey: local.amapKey };
+          if (cached) return { ...local, ...cached };
         } catch { /* 无缓存，保持本机值 */ }
         account.status = '离线模式，数据暂存本机';
       }
@@ -221,11 +212,11 @@ export function withAccountSync(bridge: PlatformBridge): PlatformBridge {
     if (key === 'readSettings') return async () => {
       const local = await target.readSettings();
       if (!account.user) return local;
-      // 云端偏好优先；Key 永远取本机（服务端不存它）。
+      // 云端偏好优先。
       return pullPreferences(local);
     };
     if (key === 'writeSettings') return async (settings: SharedSettings) => {
-      // 本机先写：App Group 是手表拿 Key 的唯一通道，不能被网络拖慢或拖败。
+      // 本机先写：App Group 是对端设备拿设置的唯一通道，不能被网络拖慢或拖败。
       await target.writeSettings(settings);
       // 再异步推云端；失败静默（本机已生效，下次改设置会重推）。
       if (account.user) void pushPreferences(settings);

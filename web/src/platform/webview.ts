@@ -269,14 +269,13 @@ export class WebViewBridge implements PlatformBridge {
   /**
    * 读取跨设备设置。原生经 App Group 落地，并由 WCSession 与手表互通。
    *
-   * 失败时**回落到本地存储**而不是空值：原生桥短暂不可用不该让用户刚填的 Key 消失。
+   * 失败时**回落到本地存储**而不是空值：原生桥短暂不可用不该让用户刚改的出行方式消失。
    */
   async readSettings(): Promise<SharedSettings> {
     try {
       const result = (await this.call('settings.read')) as Record<string, unknown> | null;
       if (result && typeof result === 'object') {
         return {
-          amapKey: typeof result.amapKey === 'string' ? result.amapKey : '',
           travelMode: typeof result.travelMode === 'string' ? result.travelMode : 'driving',
           // 原生侧同样用 `decodeIfPresent` 兜底；这里再兜一层，防旧原生包不返回该字段。
           speechEnabled: result.speechEnabled !== false,
@@ -294,8 +293,10 @@ export class WebViewBridge implements PlatformBridge {
   }
 
   /**
-   * 写入并广播给配对设备。**这一步是手表拿到高德 Key 的唯一路径** ——
-   * 写 localStorage 手表读不到（跨设备、跨容器）。
+   * 写入并广播给配对设备（出行方式 / 播报开关 / 超时策略）。
+   *
+   * 🔴 地图 Key **不在这里**，也不该在这里：所有高德请求由 `commute.rest` 桥
+   * 交给原生代发到服务端代理，Key 从未离开服务器。
    */
   async writeSettings(settings: SharedSettings): Promise<void> {
     try {

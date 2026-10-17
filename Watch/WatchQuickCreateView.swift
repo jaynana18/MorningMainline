@@ -46,8 +46,6 @@ struct WatchQuickCreateView: View {
         QuickRoutineParser.makeSteps(from: input)
     }
 
-    private var hasKey: Bool { store.settings.hasKey }
-
     private var canSave: Bool {
         if !stops.isEmpty {
             return stopIndex >= stops.count
@@ -105,11 +103,6 @@ struct WatchQuickCreateView: View {
                         store.setTravelMode(mode)
                         // 方式变了，已算出的通勤时长就过期了，必须作废重来。
                         resetCommutes()
-                    }
-                    if !hasKey {
-                        Text("地图服务还没就绪。在手机上打开一次 App 就会同步过来。没有它也能创建，只是不计算路程。")
-                            .font(.caption2)
-                            .foregroundStyle(.orange)
                     }
                 }
 
@@ -208,11 +201,6 @@ struct WatchQuickCreateView: View {
     /// 为第 `stopIndex` 个地点搜候选。搜到就弹选点列表；搜不到就把原因写进 `message`。
     private func pickNextStop() async {
         guard stopIndex < stops.count else { return }
-        guard hasKey else {
-            message = "地图服务还没就绪，已跳过地点选择。保存后仍会创建任务线，只是不含路程。"
-            stopIndex = stops.count
-            return
-        }
 
         busy = true
         message = ""
@@ -221,7 +209,6 @@ struct WatchQuickCreateView: View {
         let origin = commuteSteps.last?.commute?.location
         do {
             let route = try await CommuteService.shared.queryCommute(
-                key: store.settings.amapKey,
                 address: stop.query,
                 mode: travelMode,
                 originLocation: origin
@@ -254,7 +241,6 @@ struct WatchQuickCreateView: View {
         isLoadingRoute = true
         do {
             let route = try await CommuteService.shared.queryCommute(
-                key: store.settings.amapKey,
                 address: stop.query,
                 mode: travelMode,
                 selectedDestination: destination,

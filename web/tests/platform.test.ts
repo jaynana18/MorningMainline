@@ -533,7 +533,6 @@ describe('platform — 跨设备设置里的播报开关（speechEnabled）', ()
   it('浏览器宿主：无存量设置时默认开（新装用户不该先去设置里找开关）', async () => {
     const bridge = createBrowserBridge();
     await expect(bridge.readSettings()).resolves.toEqual({
-      amapKey: '',
       travelMode: 'driving',
       speechEnabled: true,
       overduePolicy: DEFAULT_OVERDUE_POLICY,
@@ -543,7 +542,6 @@ describe('platform — 跨设备设置里的播报开关（speechEnabled）', ()
   it('浏览器宿主：写入 false 后读回仍是 false（关得住）', async () => {
     const bridge = createBrowserBridge();
     await bridge.writeSettings({
-      amapKey: 'k',
       travelMode: 'walking',
       speechEnabled: false,
       overduePolicy: DEFAULT_OVERDUE_POLICY,
@@ -551,8 +549,6 @@ describe('platform — 跨设备设置里的播报开关（speechEnabled）', ()
     const restored = await bridge.readSettings();
     expect(restored.speechEnabled).toBe(false);
     expect(restored.travelMode).toBe('walking');
-    // 高德 Key 必须原样带过去 —— 新增字段不能把同一个对象里别的值挤掉。
-    expect(restored.amapKey).toBe('k');
   });
 
   it('浏览器宿主：旧数据缺 speechEnabled 键 → 按开处理（不能当成用户主动关闭）', async () => {
@@ -565,13 +561,14 @@ describe('platform — 跨设备设置里的播报开关（speechEnabled）', ()
     };
     await internals.store.set(
       'morning-mainline.settings.v1',
-      JSON.stringify({ amapKey: 'legacy', travelMode: 'transit' }),
+      JSON.stringify({ travelMode: 'transit' }),
     );
 
     const restored = await bridge.readSettings();
     // `!== false` 而非 `=== true`：缺键走 true。用 `=== true` 会让老用户静默变哑巴。
     expect(restored.speechEnabled).toBe(true);
-    expect(restored.amapKey).toBe('legacy');
+    // 老版本存过的字段照常还原。
+    expect(restored.travelMode).toBe('transit');
   });
 
   it('WebView 宿主：settings.write 把 speechEnabled 一并发出（原生才是权威存储）', async () => {
@@ -595,7 +592,6 @@ describe('platform — 跨设备设置里的播报开关（speechEnabled）', ()
     vi.stubGlobal('window', host);
 
     await new WebViewBridge().writeSettings({
-      amapKey: '',
       travelMode: 'driving',
       speechEnabled: false,
       overduePolicy: DEFAULT_OVERDUE_POLICY,
@@ -604,7 +600,6 @@ describe('platform — 跨设备设置里的播报开关（speechEnabled）', ()
     const call = posted.find((item) => item.method === 'settings.write');
     expect(call).toBeDefined();
     expect(call!.params).toEqual({
-      amapKey: '',
       travelMode: 'driving',
       speechEnabled: false,
       overduePolicy: DEFAULT_OVERDUE_POLICY,
@@ -617,11 +612,11 @@ describe('platform — 跨设备设置里的播报开关（speechEnabled）', ()
         messageHandlers: {
           mainline: {
             postMessage: (message: { id: string }) => {
-              // 模拟「旧原生包」：只回 amapKey / travelMode，没有 speechEnabled。
+              // 模拟「旧原生包」：只回 travelMode，没有 speechEnabled。
               (host as unknown as { __mainlineReply?: (r: unknown) => void }).__mainlineReply?.({
                 id: message.id,
                 ok: true,
-                result: { amapKey: 'old-build', travelMode: 'driving' },
+                result: { travelMode: 'driving' },
               });
             },
           },
@@ -633,7 +628,6 @@ describe('platform — 跨设备设置里的播报开关（speechEnabled）', ()
 
     const restored = await new WebViewBridge().readSettings();
     expect(restored.speechEnabled).toBe(true);
-    expect(restored.amapKey).toBe('old-build');
     // 旧原生包同样没有 overduePolicy → 必须回落默认（全程 2 分钟），而不是 undefined。
     // 若漏了兜底，`overdueRound` 会在 tick 里算 NaN 轮次 → 超时提醒**永远不触发**。
     expect(restored.overduePolicy).toEqual(DEFAULT_OVERDUE_POLICY);
@@ -650,7 +644,6 @@ describe('platform — 跨设备设置里的播报开关（speechEnabled）', ()
                 id: message.id,
                 ok: true,
                 result: {
-                  amapKey: 'k',
                   travelMode: 'driving',
                   speechEnabled: true,
                   overduePolicy: { earlyInterval: 0, switchAfter: 999, lateInterval: 'x' },

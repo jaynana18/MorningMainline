@@ -94,7 +94,8 @@ const busy = ref(false), error = ref('');
  * setter 里 `void` 掉 promise：保存是后台动作，`saveSettings` 已保证失败静默
  * （桥内部 catch + 回落），不该让输入框卡住或弹错。
  *
- * ⚠️ 高德 Key 不在这里 —— 它是**开发者配置**（构建期 env 注入），不是用户设置。
+ * ⚠️ 高德 Key 不在这里，也**不再存在**于任何设置里 —— 地图请求改走服务端代理，
+ * 凭据从未进入客户端（见 `platform/commute.ts` 注释）。
  */
 const travelMode = computed({
   get: () => store.settings.travelMode,
