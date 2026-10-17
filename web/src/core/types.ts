@@ -32,7 +32,7 @@ export type Recurrence = 'once' | 'daily';
 export type RoutineRecurrence = Recurrence;
 
 /** 临时任务插入位置（非 Codable，仅 UI/入参用途）。 */
-export type TemporaryTaskPlacement = 'now' | 'afterCurrent';
+export type TemporaryTaskPlacement = 'now' | 'afterCurrent' | 'beforeDeadline';
 
 /** 步骤状态。 */
 export type StepState = 'pending' | 'active' | 'suspended' | 'completed' | 'skipped';
@@ -58,14 +58,16 @@ export const RECURRENCE_TITLES: Readonly<Record<Recurrence, string>> = {
   once: '单次',
   daily: '每天',
 };
-export const TEMPORARY_TASK_PLACEMENTS: readonly TemporaryTaskPlacement[] = ['now', 'afterCurrent'];
+export const TEMPORARY_TASK_PLACEMENTS: readonly TemporaryTaskPlacement[] = ['now', 'afterCurrent', 'beforeDeadline'];
 export const PLACEMENT_TITLES: Readonly<Record<TemporaryTaskPlacement, string>> = {
   now: '立即做',
   afterCurrent: '当前任务后',
+  beforeDeadline: '截止节点前',
 };
 export const PLACEMENT_DETAILS: Readonly<Record<TemporaryTaskPlacement, string>> = {
   now: '先暂停当前任务，做完马上回到主线。',
   afterCurrent: '先完成正在做的事，再执行这项临时任务。',
+  beforeDeadline: '排在截止节点前，不打断当前任务，之后可以调整顺序。',
 };
 export const PARSE_SOURCE_TITLES: Readonly<Record<ParseSource, string>> = {
   rule: '本机识别',

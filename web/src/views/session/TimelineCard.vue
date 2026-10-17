@@ -173,7 +173,6 @@
       </div>
       <p v-if="replanBusy" class="mm-sort-note">正在按新出发地重算路段…</p>
       <p v-else-if="replanError" class="mm-sort-note mm-sort-note--warn">{{ replanError }}</p>
-      <p v-else-if="replanNotice" class="mm-sort-note">{{ replanNotice }}</p>
 
       <div class="mm-actions mm-actions--end">
         <button class="mm-btn mm-btn--secondary" :disabled="committing" @click="cancelSort">放弃调整</button>
@@ -275,12 +274,40 @@
     <div class="mm-current-dock">
       <div>
         <b>{{ dockTitle }}</b><small>{{ dockSubtitle }}</small>
+        <label v-if="current" class="mm-hint" style="display: flex; align-items: center; gap: 4px; margin-top: 4px">
+          <input type="checkbox" :checked="addGuardIDs.has(current.id)" @change="toggleAddGuard(current.id, $event)" />
+          新增先确认
+        </label>
       </div>
       <div class="mm-current-dock__actions">
         <button v-if="current" class="mm-btn mm-btn--primary" @click="completeItem(current)">完成</button>
+        <button v-if="current" class="mm-btn mm-btn--secondary" @click="store.snoozeCurrent(120)">再做 2 分钟</button>
         <button v-else-if="firstOpenGroup.length" class="mm-btn mm-btn--primary" @click="startGroup(firstOpenGroup)">
           提前开始
         </button>
+        <button v-if="firstOpenGroup.length && !sortMode" class="mm-btn mm-btn--secondary" aria-label="临时加事" title="临时加事" @click="openTemporaryTask">＋</button>
+      </div>
+    </div>
+
+    <div v-if="showsTemporaryTask" class="mm-modal-backdrop" @click.self="closeTemporaryTask">
+      <div class="mm-modal" data-testid="temporary-task-view">
+        <h4>临时加一件事</h4>
+        <label class="mm-hint" for="temporary-title">做什么</label>
+        <input id="temporary-title" v-model="temporaryTitle" class="mm-input" type="text" placeholder="例如：拿快递" />
+        <label class="mm-hint" for="temporary-minutes">预计用几分钟</label>
+        <input id="temporary-minutes" v-model.number="temporaryMinutes" class="mm-input" type="number" min="1" max="180" />
+        <p class="mm-hint">{{ deadlineItem ? '新任务排在截止节点前' : '新任务排在待办末尾' }}，不打断当前任务；加入后可调整顺序。</p>
+        <p v-if="canAddTemporaryTask" class="mm-hint">后续计划预计后移 {{ formatMinutes(temporaryMinutes * 60) }}。</p>
+        <p v-if="requiresAddConfirmation" class="mm-hint" style="color: var(--mm-red)">
+          当前任务设置了新增前确认。计划有变时，仍可继续加入。
+        </p>
+        <p v-if="temporaryConfirming" class="mm-hint">确认加入“{{ temporaryTitle.trim() }}”吗？</p>
+        <div class="mm-actions mm-actions--end">
+          <button class="mm-btn mm-btn--secondary" @click="closeTemporaryTask">取消</button>
+          <button class="mm-btn mm-btn--primary" :disabled="!canAddTemporaryTask" @click="addTemporaryTask">
+            {{ temporaryConfirming ? '仍要加入' : '加入计划' }}
+          </button>
+        </div>
       </div>
     </div>
   </section>
@@ -289,7 +316,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import {
-  developerAmapKey,
   estimatedCompletion,
   estimatedDueDates,
   formatMinutes,
@@ -321,6 +347,15 @@ const pendingConfirmationIDs = ref<Set<string>>(new Set());
 const timelineOrderIDs = ref<string[]>([]);
 const frozenHeights = ref<Record<string, number>>({});
 const alertMode = ref<'silent' | 'strict'>('strict');
+const addGuardIDs = ref<Set<string>>(new Set());
+const showsTemporaryTask = ref(false);
+const temporaryTitle = ref('');
+const temporaryMinutes = ref(5);
+const temporaryConfirming = ref(false);
+const requiresAddConfirmation = computed(() => current.value !== null && addGuardIDs.value.has(current.value.id));
+const canAddTemporaryTask = computed(() => temporaryTitle.value.trim().length > 0 &&
+  Number.isFinite(temporaryMinutes.value) && temporaryMinutes.value >= 1 && temporaryMinutes.value <= 180);
+watch([temporaryTitle, temporaryMinutes], () => { temporaryConfirming.value = false; });
 const pixelsPerMinute = 4;
 const tasklineElement = ref<HTMLElement | null>(null);
 /**
@@ -359,7 +394,6 @@ const committing = ref(false);
 const recomputedRoutes = ref<Record<string, { origin: string; route: CommuteRoute }>>({});
 const replanBusy = ref(false);
 const replanError = ref('');
-const replanNotice = ref('');
 /** 已保存的调整，供「撤销」回滚顺序、路线与时长。 */
 const undoSnapshot = ref<{
   order: string[];
@@ -368,11 +402,10 @@ const undoSnapshot = ref<{
 /** 保存那一刻的可重排顺序签名：用来区分「刚保存」与「之后任务线又被改动」。 */
 const undoSignature = ref('');
 /**
- * 高德 Key 是**开发者配置**（构建期 `web/.env.local` 注入），不是用户设置 ——
- * 所以不从这里读 `store.settings.amapKey`，也不再由界面填写。
- * 由 `developerAmapKey()` 单一出口供给，避免「这个视图有 Key、那个视图没有」。
+ * 地图与路线服务由**服务端代理**提供（Key 只在服务器上），前端不再持有任何凭据。
+ * 因此这里没有「Key 没配就不重算」这条分支 —— 该判断已下沉到代理，
+ * 失败时统一以可读文案返回（见 `platform/commute.ts` 的 `amapRest`）。
  */
-const amapKey = ref(developerAmapKey());
 
 const rawTaskItems = computed(() => session.value?.progress.filter((item) => item.step.role === 'task') ?? []);
 function routeForItem(item: StepProgress) {
@@ -612,7 +645,6 @@ watch(() => effectiveNow.value.getTime(), () => {
 watch(() => draftKeys.value.join(','), () => {
   recomputedRoutes.value = {};
   replanError.value = '';
-  replanNotice.value = '';
   // 上一轮可能在飞（或不匹配的 token 让它提前返回）：忙碌态必须一起复位，否则永久卡住。
   replanBusy.value = false;
   if (sortMode.value) void scheduleReplans();
@@ -635,6 +667,7 @@ function loadLocalState(): void {
     timelineOrderIDs.value = JSON.parse(localStorage.getItem(`mm-order-${id}`) ?? '[]') as string[];
     frozenHeights.value = JSON.parse(localStorage.getItem(`mm-heights-${id}`) ?? '{}') as Record<string, number>;
     alertMode.value = localStorage.getItem(`mm-alert-${id}`) === 'silent' ? 'silent' : 'strict';
+    addGuardIDs.value = new Set(JSON.parse(localStorage.getItem(`mm-add-guard-${id}`) ?? '[]') as string[]);
     if (timelineOrderIDs.value.length === 0) {
       timelineOrderIDs.value = rawTaskItems.value.map((item) => item.id);
       saveLocalState();
@@ -649,8 +682,35 @@ function saveLocalState(): void {
   localStorage.setItem(`mm-order-${id}`, JSON.stringify(timelineOrderIDs.value));
   localStorage.setItem(`mm-heights-${id}`, JSON.stringify(frozenHeights.value));
   localStorage.setItem(`mm-alert-${id}`, alertMode.value);
+  localStorage.setItem(`mm-add-guard-${id}`, JSON.stringify([...addGuardIDs.value]));
 }
 function setAlertMode(mode: 'silent' | 'strict'): void { alertMode.value = mode; saveLocalState(); }
+function toggleAddGuard(id: string, event: Event): void {
+  const next = new Set(addGuardIDs.value);
+  if ((event.target as HTMLInputElement).checked) next.add(id);
+  else next.delete(id);
+  addGuardIDs.value = next;
+  saveLocalState();
+}
+function openTemporaryTask(): void {
+  temporaryTitle.value = '';
+  temporaryMinutes.value = 5;
+  temporaryConfirming.value = false;
+  showsTemporaryTask.value = true;
+}
+function closeTemporaryTask(): void {
+  showsTemporaryTask.value = false;
+  temporaryConfirming.value = false;
+}
+function addTemporaryTask(): void {
+  if (!canAddTemporaryTask.value) return;
+  if (requiresAddConfirmation.value && !temporaryConfirming.value) {
+    temporaryConfirming.value = true;
+    return;
+  }
+  store.addTemporaryTask(temporaryTitle.value.trim(), temporaryMinutes.value, 'beforeDeadline');
+  closeTemporaryTask();
+}
 function formatClockWithSeconds(date: Date): string {
   const hours = String(date.getHours()).padStart(2, '0');
   const minutes = String(date.getMinutes()).padStart(2, '0');
@@ -778,7 +838,6 @@ function enterSortMode(): void {
   );
   recomputedRoutes.value = {};
   replanError.value = '';
-  replanNotice.value = '';
   replanToken += 1;
   undoSnapshot.value = null;
   sortMode.value = true;
@@ -794,7 +853,6 @@ function cancelSort(): void {
   draftActivityOrder.value = {};
   recomputedRoutes.value = {};
   replanError.value = '';
-  replanNotice.value = '';
 }
 
 function moveGroup(index: number, delta: number): void {
@@ -928,7 +986,7 @@ function scheduleReplans(): Promise<void> {
  *
  * 传 `destination.location` 给 `queryCommute` 会跳过 POI 选点、直接按坐标算路，
  * 所以这里不需要用户重新确认目的地 —— 变的只是「从哪里出发」。
- * 无 Key 时不假装算出结果：明确提示，保存时跳过路线写入（顺序照常保存）。
+ * 失败时由 `runReplans` 的 catch 给出可读提示，保存时跳过路线写入（顺序照常保存）。
  */
 async function runReplans(): Promise<void> {
   const pending = changedReplans.value.filter((plan) => !recomputedRoutes.value[plan.stepID]);
@@ -937,21 +995,14 @@ async function runReplans(): Promise<void> {
     replanBusy.value = false;
     return;
   }
-  if (!amapKey.value.trim()) {
-    replanBusy.value = false;
-    replanNotice.value = '当前版本未内置地图服务，路段时长无法重算；保存后顺序生效，路线保持原样。';
-    return;
-  }
 
   const token = replanToken;
   replanBusy.value = true;
   replanError.value = '';
-  replanNotice.value = '';
   try {
     const next = { ...recomputedRoutes.value };
     for (const plan of pending) {
       const route = await queryCommute(
-        amapKey.value,
         plan.destination.name,
         plan.mode,
         plan.destination,
@@ -1043,7 +1094,7 @@ async function commitDraft(): Promise<void> {
     const plans = changedReplans.value;
 
     // 还没算完的路段等一次，避免保存出「新顺序 + 旧路线」的半截状态。
-    if (plans.some((plan) => !draftRouteByID.value[plan.stepID]) && amapKey.value.trim()) {
+    if (plans.some((plan) => !draftRouteByID.value[plan.stepID])) {
       await runReplans();
     }
 
@@ -1071,7 +1122,6 @@ async function commitDraft(): Promise<void> {
     draftActivityOrder.value = {};
     recomputedRoutes.value = {};
     replanError.value = '';
-    replanNotice.value = '';
   } finally {
     committing.value = false;
   }

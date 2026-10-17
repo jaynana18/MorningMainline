@@ -340,8 +340,10 @@ export class RoutineStore {
         session.activeProgressID !== null
           ? session.progress.findIndex((item) => item.id === session.activeProgressID)
           : -1;
-      const insertionIndex =
-        currentIndex >= 0 ? Math.min(currentIndex + 1, session.progress.length) : 0;
+      const deadlineIndex = session.progress.findIndex((item) => item.step.role === 'deadline');
+      const insertionIndex = placement === 'beforeDeadline'
+        ? deadlineIndex >= 0 ? deadlineIndex : session.progress.length
+        : currentIndex >= 0 ? Math.min(currentIndex + 1, session.progress.length) : 0;
       session.progress.splice(insertionIndex, 0, temporaryProgress);
       this.consumeDelay(session, insertionIndex + 1, duration);
     }
