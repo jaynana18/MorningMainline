@@ -25,6 +25,24 @@
 
 ---
 
+## 1b. 全屏适配分工（2026-10-15 定）
+
+**一句话：原生把整个屏幕交还给网页，避让全权由 CSS 的 `env(safe-area-inset-*)` 负责。**
+
+不这么做就会出「上下不满屏、有黑边」（2026-10-15 实修 bug）。**三处缺一不可**：
+
+| # | 位置 | 改动 | 缺了会怎样 |
+| --- | --- | --- | --- |
+| 1 | `iOS/MorningMainlineApp.swift` | `WebHost(store:).ignoresSafeArea()` | SwiftUI 会把整个 `UIViewControllerRepresentable` 内缩到安全区 —— **此时 `view` 本身就是内缩后的框**，只改约束无效 |
+| 2 | `iOS/WebHost.swift` | 约束绑 `view.leadingAnchor/topAnchor/...`（**不是** `safeAreaLayoutGuide`）+ `scrollView.contentInsetAdjustmentBehavior = .never` | 边缘露出黑底；或 WKWebView 再自动避让一次 → **双重避让** |
+| 3 | `web/index.html` | viewport 加 `viewport-fit=cover` | **`env(safe-area-inset-*)` 恒为 0**，CSS 避让全部失效 |
+
+**连带约束**：既然避让归 CSS，**每个贴边的容器都要自己吃 `env()`**（`.mm-toolbar` 吃 top、底部抽屉不吃 top 但要吃 bottom、加载态提示同理）。新增全屏布局时别忘了这条。
+
+**验证要点**：黑边在**浅色模式下几乎看不出**（正是此前漏掉的原因），**必须在深色模式验**。判据用「顶/底最外 8 行最暗像素亮度 > 60」。多机型覆盖：刘海全面屏 / 非全面屏（SE）/ iPad 各一台。
+
+---
+
 ## 2. 目录结构
 
 ```
@@ -138,8 +156,8 @@ export interface BridgeCapabilities {
   widget: boolean;                 // WebView=true, browser=false
 }
 
-/** 跨设备共用设置（2026-10-13 新增）。 */
-export interface SharedSettings { amapKey: string; travelMode: string; speechEnabled: boolean; overduePolicy: OverduePolicy }
+/** 跨设备共用设置（2026-10-13 新增；2026-10-15 去掉 amapKey）。 */
+export interface SharedSettings { travelMode: string; speechEnabled: boolean; overduePolicy: OverduePolicy }
 export const EMPTY_SHARED_SETTINGS: SharedSettings;
 
 export interface PlatformBridge {
@@ -150,9 +168,9 @@ export interface PlatformBridge {
   readSnapshot(): Promise<RoutineSnapshot | null>;
   writeSnapshot(snapshot: RoutineSnapshot): Promise<void>;
 
-  /** 读取跨设备共用设置（高德 Key / 出行方式）。无能力时返回 EMPTY_SHARED_SETTINGS。 */
+  /** 读取跨设备共用设置（出行方式 / 播报 / 超时策略）。无能力时返回 EMPTY_SHARED_SETTINGS。 */
   readSettings(): Promise<SharedSettings>;
-  /** 写入并广播给配对设备（手表靠这一步拿到 Key）。无能力时静默 no-op。 */
+  /** 写入并广播给配对设备（手表靠这一步拿到三项偏好）。无能力时静默 no-op。 */
   writeSettings(settings: SharedSettings): Promise<void>;
 
   requestNotificationAuthorization(): Promise<boolean>;
@@ -180,12 +198,24 @@ export function createBridge(): PlatformBridge;
 - `platform/mock.ts` 必须提供纯内存实现，供单测与浏览器无持久化场景使用。
 - 浏览器宿主的 `writeSnapshot` 落 `IndexedDB`；`deviceInfo().id` 必须**持久化且稳定**（否则 `originID` 过滤失效 → 同步自激）。
 - 浏览器宿主 `parseWithModel` 在**无后端代理时返回 `null`**，绝不可把 API Key 打进前端产物。
-- 🔴 **高德 Key 是「开发者配置」而非用户数据**（2026-10-15 修订）：从用户界面**移除**，只在构建期由 `web/.env.local` 的 `VITE_AMAP_WEB_SERVICE_KEY` 注入，统一出口是 `platform/commute.ts` 的 `developerAmapKey()`。JS 启动时把该值写进 `settings`（`writeSettings`）以落 App Group 并广播手表 —— 因为 `Watch/WatchQuickCreateView.swift` 只能从 `settings.amapKey` 读。
-  - ⚠️ `VITE_` 前缀意味着 Key **会被打包进 JS 产物**。适用于自托管/内网部署；若 `web/dist` 要公开发布，删掉该变量即可，届时通勤功能自动降级为「未内置地图服务」提示（不会把 Key 送出去）。
-  - ⚠️ `iOS/WebHost.swift` 的 `settings.write` 必须写成「**只有传了 `amapKey` 才改**」。若沿用 `?? ""` 兜底，用户每改一次出行方式都会把 App Group 里的 Key 清空 → 手表随即失去 Key。
+- 🔴 **高德 Key 只存在服务端，任何客户端都不持有它**（2026-10-15 第二次修订，B 方案／BFF）。
+  - 事实起点：Key 曾由构建期 `VITE_AMAP_WEB_SERVICE_KEY` 注入 → **实证泄露到线上 JS 产物**（`VITE_` 前缀即等于公开）。把 Key 挪进任何客户端形态（localStorage / App Group / Watch settings）都只是换个地方公开，因为客户端产物一定可被下载反查。
+  - 现方案：Key 只活在账号服务进程的环境变量 `AMAP_WEB_SERVICE_KEY`（`server/.env.account`）。对外暴露同源代理：
+    - `GET /api/commute/rest?path=<高德接口>&<业务参数…>` → JSON
+    - `GET /api/commute/staticmap?<静态地图参数…>` → PNG
+  - **三道防线**（`server/account-server.mjs` 的 `handleCommute`）：① Key 本体不外泄，攻击者绕不开本服务直连高德；② **精确字符串 path 白名单**（`AMAP_PATHS`，不做前缀匹配）防 SSRF，本服务不得沦为任意 URL 转发器；③ 按 IP 限流（60/分、2000/天，`AMAP_DAILY_LIMIT` 可调）把盗刷压在免费额度内。
+  - **参数白名单透传**（`AMAP_PARAMS`）：`key` **不在表内**，客户端自带 `key` 一律被丢弃、无法覆盖服务端那把。用白名单而非黑名单 —— 高德未来新增「写」类参数默认拒绝。
+  - **代理刻意不引入第二把客户端凭据**：任何内嵌在 JS 里的 token 与 Key 同等可被 curl 走，等于白加一层。
+  - 三端都只访问代理，**客户端零凭据**：
+    - WebView 宿主（`file://`）：原生 `commute.rest` 桥（`iOS/WebHost.swift` 硬编码 `https://47.104.95.146/api/commute/rest`）。
+    - 浏览器宿主：同源 `fetch('/api/commute/rest')`（dev 由 `web/vite.config.ts` 代理到 ECS）。
+    - Watch：`Shared/Services/CommuteService.swift` 直连同一代理。
+  - ⚠️ **静态地图无法走桥**：`<img src>` 不接受 Promise，且 `file://` 下相对路径 `/api/commute/…` 会解析到文件系统根。故 WebView 宿主必须拼**固定 HTTPS 域名**（`platform/commute.ts` 的 `COMMUTE_ORIGIN`）；该端点无需凭据，可安全直连。
+  - 📌 **不要回退成「把 Key 塞进设置」**：`SharedSettings` 已无 `amapKey`，`developerAmapKey()` 已删除，`web/.env.local` 已删除。`ProfileView` 上也不应有 Key 输入框。
+  - 因此 `settings.write` 不再需要「只有传了 `amapKey` 才改」的特判 —— 那个坑随字段消失而消失。
 - 🔴 **「用户习惯」三项（出行方式 / 语音播报 / 超时提醒间隔）跟账号走**：走 `platform/account.ts` 的 `withAccountSync` 代理 → `GET/PUT /api/account/preferences`。**LWW 而非乐观锁**（偏好冲突代价只是覆盖某一项），`updatedAt` 由服务端打。
-  - 🔴 `pullPreferences` **绝不能整体替换** —— 必须显式保留本机的 `amapKey`，否则「换个账号登录」会静默清空 Key（界面上已无输入框，用户无从发现）。
-- **`amapKey` 的跨设备共享在浏览器宿主物理上做不到**：WebView 宿主下写进 App Group 并经 WCSession 广播给手表；浏览器宿主只能落 `localStorage`（仅本页有效，无手表）。这一点必须如实向用户呈现，不可假装同步成功。
+  - 🔴 `pullPreferences` **绝不能整体替换**本机设置对象 —— 必须显式只合并服务端白名单三项（`pickPreferences`）。历史上这里还额外保护过 `amapKey`，该字段已不存在，但「只并白名单、不整体覆盖」的纪律必须保留（否则未来任何本机独有字段都会静默被清）。守卫测试：`web/tests/account-preferences.test.ts` 的「🔴 推送内容只含白名单三项」。
+- **`travelMode` 等三项偏好的跨设备共享**：WebView 宿主写 App Group 并经 WCSession 广播给手表；浏览器宿主只能落 `localStorage`（仅本页有效，无手表）。这一点必须如实向用户呈现，不可假装同步成功。
 - 桥的调用必须带超时与失败降级：任何原生方法抛错/超时（建议 5s）都不得让 UI 卡死，须回落到 `browser` 语义或返回 `null`。
 
 ### 4b.2 Pinia store 契约（`web/src/stores/routine.ts`）

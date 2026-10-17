@@ -964,21 +964,23 @@ function apply(incoming, current, selfDeviceID) {
   - ⚠️ **提前预警与通勤出发提醒不进页内弹窗**：`web/src/core/reminders.ts` 的 `buildReminders` 只产出「task 到点 + 8 个里程碑」两类，因为页内弹窗只在用户盯着屏幕时出现，提前提醒在那里是噪音。两类新提醒的价值在屏幕没亮时，属系统通知通道职责。但**文案仍在该文件里以常量形式锚定**（`TASK_ADVANCE_TITLE` / `COMMUTE_DEPART_TITLE` / `taskAdvanceBody`），改 Swift 文案必须同步，否则测试会红。
 
 ### 5.1b 高德通勤查询 — `CommuteService` / `LocationProvider`（`URLSession` / `CoreLocation`）
-- **现在负责什么**（2026-10-13 新增，Watch 与 iPhone 共用）：
-  - `CommuteService.queryCommute(key:address:mode:selectedDestination:originLocation:)`：走高德 **Web 服务 REST**（非 SDK）。候选策略三段式：`place/around`（出发地 10km 内）→ `place/text`（按城市按名搜）→ `place/around`（附近 3km 兜底，并标记 `usedNearbyFallback` 以改写提示文案）。搜到多个候选时抛 `.selectionRequired(candidates, message)`，由 UI 抉择后带 `selectedDestination` 重试（此时跳过选点、直接按坐标算路）。
-  - 出发地三级回落：显式传入 → 60 秒内存缓存（**不落盘**）→ 现场定位。定位拿到的 GPS 坐标须经 `assistant/coordinate/convert`（`coordsys=gps`）转 GCJ-02。
+- **现在负责什么**（2026-10-13 新增，Watch 与 iPhone 共用；**2026-10-15 改为走服务端代理**）：
+  - `CommuteService.queryCommute(address:mode:selectedDestination:originLocation:)`：经**本应用自己的服务端代理**访问高德 **Web 服务 REST**（非 SDK），代理地址为 `https://47.104.95.146/api/commute/rest?path=<高德接口>&<业务参数…>`。**客户端不持有任何 Key** —— Key 只在服务端进程环境变量 `AMAP_WEB_SERVICE_KEY` 里（详见 `ARCHITECTURE.md` 的 B 方案说明）。候选策略三段式：`place/around`（出发地 10km 内）→ `place/text`（按城市按名搜）→ `place/around`（附近 3km 兜底，并标记 `usedNearbyFallback` 以改写提示文案）。搜到多个候选时抛 `.selectionRequired(candidates, message)`，由 UI 抉择后带 `selectedDestination` 重试（此时跳过选点、直接按坐标算路）。
+  - 出发地三级回落：显式传入 → 60 秒内存缓存（**不落盘**）→ 现场定位。定位拿到的 GPS 坐标须经 `assistant/coordinate/convert`（`coordsys=gps`）转 GCJ-02（同样走代理）。
   - 算路：`direction/driving|walking|transit`；公交走 `direction/transit/integrated` 并需 `city`/`cityd`。多方案按 `duration` 升序取最快；`seconds` 向上取整到整分钟。`polyline` 递归收集（`buslines` 只取首段）、抽样至 60 点、保留首尾。
+  - 非 2xx 时优先取代理返回的 `{error}` 文案（如「地图服务尚未配置」/「请求过于频繁」），比裸的 HTTP 码对用户更有意义。
   - **刻意不生成地图 URL**：Watch 不展示地图，静态地图接口对其无意义。
 - **为什么用 REST 而不是官方 SDK**：高德 iOS SDK（AMapSearchKit / AMapFoundation）**不支持 watchOS**；REST 是纯 HTTP GET，watchOS 的 `URLSession` 直接可用。
-- **Web 替代必须满足**：浏览器端已有等价实现（`web/src/platform/commute.ts`），两端行为须一致；差异只有一处 —— 浏览器宿主**不得持有 API Key**（物理边界，见 ARCHITECTURE），须走后端代理，无代理则降级纯规则并明示。
+- **Web 替代必须满足**：浏览器端已有等价实现（`web/src/platform/commute.ts`），两端行为须一致；**两端现在都走同一个代理、都不持有 Key** —— 这是 2026-10-15 的收敛结果（此前浏览器端「不得持有 Key」而原生端持有，属过渡态）。
+- ⚠️ **代理的 path 白名单是精确字符串匹配**（`server/account-server.mjs` 的 `AMAP_PATHS`）。新增任何高德接口要**同时在服务端加白名单**，否则会得到 400「不支持的地图接口」——客户端改代码不改服务端会静默失效。
 
 ### 5.2 手表同步 — `ConnectivityService`（`WCSession` / WatchConnectivity）
 - **现在负责什么**：iOS ↔ watchOS 双向同步。承载两类载荷：
   - `payload["snapshot"]`：`RoutineSnapshot`（原有）。
-  - `payload["settings"]`：`MainlineSettings`（**2026-10-13 新增**），含高德 Web 服务 Key、出行方式、来源设备 id。
+  - `payload["settings"]`：`MainlineSettings`（**2026-10-13 新增**；**2026-10-15 去掉 `amapKey`**），现含出行方式、语音播报开关、超时提醒间隔策略、来源设备 id。高德 Key **不再属于此处** —— 它已在服务端，同步它既无必要也不可能（客户端本来就没有）。
   通过 `updateApplicationContext`（最新态）+ `sendMessage`（可达时即时）/ `transferUserInfo`（兜底队列）发送；收到后 `decode` 并分别回调 `onSnapshot` / `onSettings`。不可用时为 no-op 空实现。
 - **⚠️ 发送必须把两类载荷一起带上**：`updateApplicationContext` 是**整字典替换**，各自单独发会把对方从本机 context 里抹掉；故内部累计 `latestSnapshot` / `latestSettings` 拼装完整 payload。这是本次改造最容易踩的坑。
-- **⚠️ App Group 不能跨设备**：`group.com.jaynana.MorningMainline` 只解决**同一设备内 App ↔ 扩展**共享（iPhone App ↔ iOS Widget、Watch App ↔ 表盘复杂功能）。iPhone 与 Watch 是两个独立容器，即便标识符相同也读不到对方数据。**高德 Key 的同步路径必须是**：iPhone 写入本机 App Group → 经 WCSession 送到手表 → 手表写入自己设备上的 App Group（见 `SharedSettingsStore`）。
+- **⚠️ App Group 不能跨设备**：`group.com.jaynana.MorningMainline` 只解决**同一设备内 App ↔ 扩展**共享（iPhone App ↔ iOS Widget、Watch App ↔ 表盘复杂功能）。iPhone 与 Watch 是两个独立容器，即便标识符相同也读不到对方数据。三项用户偏好的同步路径是：iPhone 写入本机 App Group → 经 WCSession 送到手表 → 手表写入自己设备上的 App Group（见 `SharedSettingsStore`）。
 - **回声抑制**：`MainlineSettings.originID` 记录写入设备；`SharedSettingsStore.adopt` 丢弃 `originID == 本机 deviceID` 的载荷，否则两端会把对方的旧值再发回去、来回覆盖。
 - **Web 替代必须满足**：
   - 因「Watch 端保留原生 Swift 不动」，Web 端要同步就得与 **iPhone 原生**互通，需新增一条 iOS↔Web 通道（如 iCloud KV / 自建 HTTP / WebSocket），且必须复用 §0 的序列化契约（Date 参考秒、UUID 大小写）。
