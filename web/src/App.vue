@@ -1,6 +1,7 @@
 <template>
   <div class="app-shell app-shell--navigation">
-    <p v-if="!account.ready" class="mm-hint" style="padding: 24px">正在连接账号…</p>
+    <!-- 此时页面里没有任何带 `.mm-toolbar` 的视图，所以这条提示要自己避让状态栏。 -->
+    <p v-if="!account.ready" class="mm-hint" style="padding: calc(24px + env(safe-area-inset-top)) 24px 24px">正在连接账号…</p>
     <AccountView v-else-if="!account.user" />
     <template v-else>
       <div v-if="account.conflict" class="mm-section">

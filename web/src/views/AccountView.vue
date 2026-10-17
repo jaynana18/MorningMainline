@@ -35,7 +35,11 @@ async function submit(): Promise<void> {
 }
 </script>
 <style scoped>
-.account-page { padding-top: 44px; }
+/*
+  登录页没有页面级工具栏（`.mm-toolbar` 自带 `env(safe-area-inset-top)`），
+  所以这里要自己避让状态栏/灵动岛 —— WKWebView 已铺满全屏，不避让就会顶到岛下面。
+*/
+.account-page { padding-top: calc(44px + env(safe-area-inset-top)); }
 .account-brand { display: grid; place-items: center; width: 66px; height: 66px; margin: 0 auto; border-radius: 22px; color: white; background: var(--mm-primary); box-shadow: 0 8px 28px #4189eb26; }
 .account-brand-name { margin: 14px 0 4px; text-align: center; font-size: 22px; font-weight: 750; }
 .account-brand-caption { margin: 0 0 28px; text-align: center; color: #9aa8bb; font-size: 12px; }

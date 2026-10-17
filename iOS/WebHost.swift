@@ -148,14 +148,27 @@ final class WebHostController: UIViewController {
         webView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(webView)
 
-        // 贴安全区：Vue 侧的吸顶工具栏（`position: sticky; top: 0`）不会顶进刘海/状态栏。
-        // 代价是顶部/底部各让出一条画布色，与 App 底色一致，观感上无缝。
+        // 🔴 铺满**整个** view，不吃安全区（2026-10-15 修「上下不满屏、有黑边」）。
+        //
+        // 曾经绑的是 `view.safeAreaLayoutGuide`，理由是想让 Vue 侧吸顶工具栏不顶进刘海 ——
+        // 代价是上下各让出一条带，那条带由**系统**填充：浅色下是 `#F5F7FB`（与画布色几乎同色，
+        // 不易察觉），**深色模式下就是纯黑**，看上去就是「上下黑边、不满屏」。
+        //
+        // 正确的分工是：**原生交还整个屏幕，避让由 CSS 的 `env(safe-area-inset-*)` 负责**。
+        // 配套改动两处，缺一不可：
+        // - `web/index.html` 的 viewport 加 `viewport-fit=cover`（否则 `env()` 恒为 0）；
+        // - `web/src` 里给页面级 `.mm-toolbar` 与登录页补 `env(safe-area-inset-top)`。
         NSLayoutConstraint.activate([
-            webView.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
-            webView.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor),
-            webView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
-            webView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
+            webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            webView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            webView.topAnchor.constraint(equalTo: view.topAnchor),
+            webView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ])
+
+        // 🔴 必须关掉自动内边距调整，否则**双重避让**：WebView 铺满全屏后，
+        // UIKit 会按安全区自动给 scrollView 加 `contentInset`，而 CSS 侧 `env()` 同时也在避让
+        // → 内容被往下推两次（顶部留白约两倍刘海高）。`.never` 表示由 CSS 独占负责。
+        webView.scrollView.contentInsetAdjustmentBehavior = .never
 
         #if DEBUG
         if #available(iOS 16.4, *) {
@@ -416,6 +429,9 @@ extension WebHost {
             case "account.request":
                 await requestAccount(id: id, params: params)
 
+            case "commute.rest":
+                await requestCommute(id: id, params: params)
+
             case "location.current":
                 do { reply(id: id, result: try await locationProvider.current()) }
                 catch { reply(id: id, ok: false, error: error.localizedDescription) }
@@ -430,10 +446,9 @@ extension WebHost {
                 reply(id: id)
 
             case "settings.read":
-                // 高德 Key 存 App Group 而非快照里 —— 快照会多处落盘，凭据不该跟着业务数据飘。
+                // 只返回「用户自定义行为」三项 —— 地图 Key 不在设置里，客户端完全不持有它。
                 let settings = store.settings
                 reply(id: id, result: [
-                    "amapKey": settings.amapKey,
                     "travelMode": settings.travelMode,
                     "speechEnabled": settings.speechEnabled,
                     // 超时提醒间隔策略：嵌套字典而非扁平字段，与 JS 侧 `OverduePolicy` 一一对应。
@@ -445,18 +460,13 @@ extension WebHost {
                 ])
 
             case "settings.write":
-                // 这一步是手表拿到 Key 的唯一路径：写 App Group + 经 WCSession 广播。
-                // ⚠️ 只有 JS **显式传了** `amapKey` 才改动它。高德 Key 现在是开发者配置
-                // （构建期 env 注入，由 JS 在启动时灌一次），普通设置写入（出行方式、播报、
-                // 超时策略）压根不带这个字段 —— 若这里仍用 `?? ""` 兜底，用户每改一次
-                // 出行方式都会把 App Group 里的 Key 清空，手表随即失去 Key。
-                if let key = params["amapKey"] as? String {
-                    store.setAmapKey(key)
-                }
+                // 出行方式 / 播报开关 / 超时策略写入 App Group，并经 WCSession 广播给手表。
+                // ⚠️ 每个字段都是「只有 JS 显式传了才改」：旧的 JS 包不带某个字段时
+                // **整项跳过**，而不是用默认值覆盖用户已保存的配置。
+                // （地图 Key 曾经也走这里，现在已彻底移除 —— 它由服务端代理持有。）
                 if let raw = params["travelMode"] as? String, let mode = TravelMode(rawValue: raw) {
                     store.setTravelMode(mode)
                 }
-                // 只有显式传了布尔值才改动，避免旧的 JS 包不带该字段时把开关误关掉。
                 if let speech = params["speechEnabled"] as? Bool {
                     store.setSpeechEnabled(speech)
                 }
@@ -544,6 +554,40 @@ extension WebHost {
                 }
                 reply(id: id, result: ["status": http.statusCode, "data": json])
             } catch { reply(id: id, ok: false, error: "账号服务暂时无法连接，请检查网络") }
+        }
+
+        /// `commute.rest` —— 把页面的高德请求代发到**服务端代理**。
+        ///
+        /// 为什么页面的 `file://` 下必须由原生代发：打包版页面是 `file://` 加载的，
+        /// 同源 `fetch('/api/commute/...')` 会解析到文件系统根，请求根本出不去。
+        ///
+        /// 🔴 **这里不拼任何凭据**：Key 只在服务端。本方法只是把 JS 已经拼好的
+        /// query（含 `path` 白名单参数）原样转给固定 HTTPS 地址 —— 客户端从头到尾
+        /// 不持有 Key，也就没有任何可被 `curl` 走的秘密。
+        private func requestCommute(id: String, params: [String: Any]) async {
+            guard let query = params["query"] as? String,
+                  !query.isEmpty,
+                  // 只允许转发到本项目的代理路径；带协议/换行的输入一律拒绝（防拼 URL 注入）。
+                  !query.contains("://"), !query.contains("\n"), !query.contains("\r"),
+                  let url = URL(string: "https://47.104.95.146/api/commute/rest?\(query)") else {
+                reply(id: id, ok: false, error: "地图请求不允许")
+                return
+            }
+            var request = URLRequest(url: url)
+            request.timeoutInterval = 20
+            do {
+                let (data, response) = try await URLSession.shared.data(for: request)
+                guard let http = response as? HTTPURLResponse else {
+                    reply(id: id, ok: false, error: "地图服务响应异常")
+                    return
+                }
+                // 代理返回的 JSON 原样交给 JS：命中/未命中业务错误都由 JS 侧统一判 `status`。
+                guard let json = try? JSONSerialization.jsonObject(with: data) else {
+                    reply(id: id, ok: false, error: "地图服务响应异常")
+                    return
+                }
+                reply(id: id, result: json)
+            } catch { reply(id: id, ok: false, error: "地图服务暂时无法连接，请检查网络") }
         }
 
         private static var deviceRoleWire: String {

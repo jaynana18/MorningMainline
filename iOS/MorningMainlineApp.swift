@@ -101,8 +101,17 @@ struct MorningMainlineApp: App {
         WindowGroup {
             // P2：iOS/iPad 的 UI 交给 `web/` 的 Vue 产物承载（WKWebView 宿主）。
             // `iOS/ContentView.swift` 仍保留在工程里（原生实现留作回退），但不再被引用。
+            //
+            // 🔴 `.ignoresSafeArea()` 不可省（2026-10-15 修「上下不满屏、有黑边」）：
+            // SwiftUI 默认会把 `UIViewControllerRepresentable` 的**整个 view 内缩到安全区内**，
+            // 所以哪怕 `WebHostController` 里把 WebView 约束到 `view.topAnchor`，
+            // 那也只是「内缩后那个框的顶边」，屏幕上照样留出刘海与 Home 指示条两条带。
+            // 必须在这里放开容器，WebView 才真正铺到屏幕物理边缘；
+            // 内容的避让改由 CSS 的 `env(safe-area-inset-*)` 负责（见 `web/index.html` 的
+            // `viewport-fit=cover` 与 `web/src/design.css` 的 `.mm-toolbar`）。
             WebHost(store: store)
                 .environmentObject(store)
+                .ignoresSafeArea()
         }
     }
 }

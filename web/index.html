@@ -2,7 +2,13 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      🔴 `viewport-fit=cover` 不是可选项（2026-10-15）：
+      没有它，`env(safe-area-inset-*)` 在 iOS WebView 里**恒为 0**，样式表里那几处避让全是死代码。
+      原生的 WKWebView 已改为铺满全屏（见 `iOS/WebHost.swift`），避让完全由 CSS 负责 →
+      必须靠 `cover` 让页面铺到屏幕物理边缘，再由下面这些 env() 把内容推回可读区。
+    -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>不跑偏</title>
   </head>
   <body>
